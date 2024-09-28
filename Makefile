@@ -6,6 +6,7 @@ deploy_database:
 	make deploy_mysqldb
 	make deploy_mongodb
 	make deploy_mssqldb
+	make deploy_redisdb
 
 deploy_mysqldb:
 	docker-compose down
