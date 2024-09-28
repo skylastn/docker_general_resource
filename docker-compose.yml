@@ -2,14 +2,14 @@ version: '3.1'
 
 services:
   db:
-    image: mysql:8.0   # Menggunakan MySQL versi 8
+    image: mysql:8.4   # Menggunakan MySQL versi 8
     container_name: mysql-service  # Menetapkan nama container untuk db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: phpmyadmin
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
       - "${MYSQL_PORT}:${MYSQL_PORT}"
     volumes:

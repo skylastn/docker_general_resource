@@ -3,7 +3,6 @@ deploy:
 	make deploy_tomcat
 
 deploy_database:
-	make deploy_mysqldb
 	make deploy_phpmyadmin
 	make deploy_mongodb
 	make deploy_mssqldb
@@ -11,11 +10,13 @@ deploy_database:
 
 deploy_mysqldb:
 	docker-compose down
-	docker-compose up -d
+	docker-compose --env-file .env up -d
 
 deploy_phpmyadmin:
+	make deploy_mysqldb
 	docker-compose -f docker-compose.phpmyadmin.yml down
-	docker-compose -f docker-compose.phpmyadmin.yml up -d
+	docker-compose -f docker-compose.phpmyadmin.yml --env-file .env up -d
+	
 
 deploy_tomcat:
 	docker-compose -f docker-compose.tomcat.yml down
