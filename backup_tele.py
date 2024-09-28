@@ -10,6 +10,7 @@ load_dotenv()
 # Configuration
 TOKEN = os.getenv('TELEGRAM_TOKEN')  # Your Telegram bot token
 CHANNEL_ID = os.getenv('TELEGRAM_CHANNEL_ID')  # Your channel ID
+MESSAGE_THREAD_ID = os.getenv('TELEGRAM_MESSAGE_THREAD_ID')  # Your message thread ID
 FOLDER_TO_BACKUP = os.getenv('PATH_FOLDER')  # Path to the folder to back up
 INCLUDE_SUBFOLDER = os.getenv('INCLUDE_SUBFOLDER')  # To determine whether to include subfolders
 
@@ -33,7 +34,11 @@ async def send_files_to_telegram(folder_path):
         # Send each file
         for file_path in tqdm(files_to_send, desc="Sending files", unit="file"):
             with open(file_path, 'rb') as f:
-                await bot.send_document(chat_id=CHANNEL_ID, document=f)
+                await bot.send_document(
+                    chat_id=CHANNEL_ID,
+                    document=f,
+                    message_thread_id=MESSAGE_THREAD_ID  # Menggunakan message_thread_id
+                )
             print(f"File {file_path} successfully sent to the Telegram channel.")
     except Exception as e:
         print(f"An error occurred while sending files to Telegram: {e}")
