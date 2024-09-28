@@ -1,3 +1,5 @@
+PYTHON := $(shell command -v python3 || command -v python)
+
 deploy:
 	make deploy_database
 	make deploy_tomcat
@@ -33,3 +35,6 @@ deploy_mssqldb:
 deploy_redisdb:
 	docker-compose -f docker-compose.redisdb.yml down
 	docker-compose -f docker-compose.redisdb.yml up -d
+
+run_backup_telegram:
+	${PYTHON} backup_tele.py
