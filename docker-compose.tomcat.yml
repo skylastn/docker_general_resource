@@ -1,0 +1,10 @@
+version: '3.1'
+
+services:
+  java-app:
+    container_name: tomcat-service
+    restart: always  # Selalu restart jika service down
+    build:
+      context: D:\Kerja\Me\Demo\demo  # Path ke subdirektori yang berisi Dockerfile
+    ports:
+      - "7000:7000"
