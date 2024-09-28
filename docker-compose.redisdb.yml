@@ -1,0 +1,9 @@
+version: '3.1'
+
+services:
+  redis:
+    image: redis:latest
+    container_name: redis-service  # Nama untuk container Redis
+    restart: always
+    ports:
+      - "6379:6379"

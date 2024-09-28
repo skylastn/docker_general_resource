@@ -1,32 +1,6 @@
 version: '3.1'
 
 services:
-  redis:
-    image: redis:latest
-    container_name: redis-service  # Nama untuk container Redis
-    restart: always
-    ports:
-      - "6379:6379"
-  mssql:
-    image: mcr.microsoft.com/mssql/server:2019-latest
-    container_name: mssql-service  # Nama untuk kontainer MSSQL
-    restart: always
-    environment:
-      SA_PASSWORD: "YourStrong!Passw0rd"  # Ganti dengan password yang kuat
-      ACCEPT_EULA: "Y"  # Setuju dengan lisensi
-    ports:
-      - "1433:1433"  # Memetakan port MSSQL ke port host
-    volumes:
-      - mssql_data:/var/opt/mssql  # Persisten data MSSQL
-
-  mongodb:
-    image: mongo:latest  # Menggunakan image MongoDB terbaru
-    container_name: mongodb-service 
-    restart: always 
-    ports:
-      - "27017:27017"  # Memetakan port MongoDB ke port host
-    volumes:
-      - mongo_data:/data/db  # Menggunakan volume untuk persistensi data
   db:
     image: mysql:8.0   # Menggunakan MySQL versi 8
     container_name: mysql-service  # Menetapkan nama container untuk db
@@ -51,9 +25,7 @@ services:
       - "8081:80"
     environment:
       PMA_HOST: db
-      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
 
 volumes:
   mysql_data:
-  mongo_data:
-  mssql_data:
