@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-COUNT_DAY_REMOVE = os.getenv('COUNT_DAY_REMOVE')
+COUNT_DAY_REMOVE = int(os.getenv('COUNT_DAY_REMOVE'))
 
 def delete_old_files(folder_path):
     # Mendapatkan waktu saat ini
