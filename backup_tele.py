@@ -3,7 +3,6 @@ import zipfile
 from telegram import Bot
 from dotenv import load_dotenv
 from tqdm import tqdm
-import time  # Hanya untuk simulasi proses
 
 # Memuat variabel lingkungan
 load_dotenv()
@@ -16,22 +15,28 @@ BACKUP_ZIP = 'backup.zip'
 
 # Fungsi untuk membuat zip dari folder dengan indikator progres
 def zip_folder(folder_path, zip_path):
-    # Hitung total file untuk indikator progres
-    total_files = sum(len(files) for _, _, files in os.walk(folder_path))
-    
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(folder_path):
-            for file in tqdm(files, desc="Mengompres file", unit="file", total=total_files):
-                file_path = os.path.join(root, file)
-                zipf.write(file_path, os.path.relpath(file_path, os.path.dirname(folder_path)))
-                time.sleep(0.1)  # Hanya untuk simulasi progres
+    try:
+        total_files = sum(len(files) for _, _, files in os.walk(folder_path))
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(folder_path):
+                for file in tqdm(files, desc="Mengompres file", unit="file", total=total_files):
+                    file_path = os.path.join(root, file)
+                    zipf.write(file_path, os.path.relpath(file_path, os.path.dirname(folder_path)))
+        
+        print("Folder berhasil dikompres menjadi:", zip_path)
+    except Exception as e:
+        print(f"Terjadi kesalahan saat mengompres folder: {e}")
 
 # Fungsi untuk mengirim file ke Telegram
 def send_file_to_telegram(file_path):
     bot = Bot(token=TOKEN)
-    with open(file_path, 'rb') as f:
-        bot.send_document(chat_id=CHAT_ID, document=f)
-    print(f"File {file_path} berhasil dikirim ke Telegram.")
+    try:
+        with open(file_path, 'rb') as f:
+            bot.send_document(chat_id=CHAT_ID, document=f)
+        print(f"File {file_path} berhasil dikirim ke Telegram.")
+    except Exception as e:
+        print(f"Terjadi kesalahan saat mengirim file ke Telegram: {e}")
 
 # Fungsi untuk menghapus file
 def delete_file(file_path):
@@ -47,4 +52,4 @@ if __name__ == '__main__':
     zip_folder(FOLDER_TO_BACKUP, BACKUP_ZIP)
     send_file_to_telegram(BACKUP_ZIP)
     delete_file(BACKUP_ZIP)  # Menghapus file backup.zip setelah dikirim
-    print("Backup folder telah dikompres, dikirim ke Telegram, dan file zip telah dihapus.")
+    print("Proses backup selesai.")
