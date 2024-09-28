@@ -25,7 +25,7 @@ def send_files_to_discord(folder_path):
     for file_path in tqdm(files_to_send, desc="Sending files to Discord", unit="file"):
         with open(file_path, 'rb') as f:
             response = requests.post(WEBHOOK_URL, files={'file': (os.path.basename(file_path), f)})
-            if response.status_code == 204:
+            if response.status_code == 204 or response.status_code == 200:
                 print(f"File {file_path} successfully sent to the Discord channel.")
             else:
                 print(f"Failed to send {file_path}. Status code: {response.status_code}")
