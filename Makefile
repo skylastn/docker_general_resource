@@ -39,4 +39,5 @@ deploy_redisdb:
 run_backup_telegram:
 	${PYTHON} backup_tele.py
 
-run_remove_file
+run_remove_file:
+	${PYTHON} remove_file.py
