@@ -54,6 +54,7 @@ if __name__ == '__main__':
 
     # Menjalankan coroutine untuk mengirim file
     asyncio.run(send_file_to_telegram(BACKUP_ZIP))
-    
-    delete_file(BACKUP_ZIP)  # Menghapus file backup.zip setelah dikirim
+    if os.getenv('DELETE_FOLDER') == '1':
+        delete_file(BACKUP_ZIP)
+    # Menghapus file backup.zip setelah dikirim
     print("Proses backup selesai.")
