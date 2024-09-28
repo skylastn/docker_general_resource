@@ -13,7 +13,7 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - ${MYSQL_DATA_PATH}
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
