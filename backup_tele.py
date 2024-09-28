@@ -3,13 +3,14 @@ import zipfile
 from telegram import Bot
 from dotenv import load_dotenv
 from tqdm import tqdm
+import asyncio
 
 # Memuat variabel lingkungan
 load_dotenv()
 
 # Konfigurasi
 TOKEN = os.getenv('TELEGRAM_TOKEN')  # Token bot Telegram kamu
-CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')  # Chat ID kamu
+CHANNEL_ID = os.getenv('TELEGRAM_CHANNEL_ID')  # ID channel kamu
 FOLDER_TO_BACKUP = os.getenv('PATH_FOLDER')  # Path folder yang ingin dibackup
 BACKUP_ZIP = 'backup.zip'
 
@@ -29,12 +30,12 @@ def zip_folder(folder_path, zip_path):
         print(f"Terjadi kesalahan saat mengompres folder: {e}")
 
 # Fungsi untuk mengirim file ke Telegram
-def send_file_to_telegram(file_path):
+async def send_file_to_telegram(file_path):
     bot = Bot(token=TOKEN)
     try:
         with open(file_path, 'rb') as f:
-            bot.send_document(chat_id=CHAT_ID, document=f)
-        print(f"File {file_path} berhasil dikirim ke Telegram.")
+            await bot.send_document(chat_id=CHANNEL_ID, document=f)  # Menggunakan await
+        print(f"File {file_path} berhasil dikirim ke channel Telegram.")
     except Exception as e:
         print(f"Terjadi kesalahan saat mengirim file ke Telegram: {e}")
 
@@ -50,6 +51,9 @@ def delete_file(file_path):
 if __name__ == '__main__':
     print("Memulai proses backup...")
     zip_folder(FOLDER_TO_BACKUP, BACKUP_ZIP)
-    send_file_to_telegram(BACKUP_ZIP)
+
+    # Menjalankan coroutine untuk mengirim file
+    asyncio.run(send_file_to_telegram(BACKUP_ZIP))
+    
     delete_file(BACKUP_ZIP)  # Menghapus file backup.zip setelah dikirim
     print("Proses backup selesai.")
