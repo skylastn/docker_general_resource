@@ -4,6 +4,7 @@ deploy:
 
 deploy_database:
 	make deploy_mysqldb
+	make deploy_phpmyadmin
 	make deploy_mongodb
 	make deploy_mssqldb
 	make deploy_redisdb
@@ -11,6 +12,10 @@ deploy_database:
 deploy_mysqldb:
 	docker-compose down
 	docker-compose up -d
+
+deploy_phpmyadmin:
+	docker-compose -f docker-compose.phpmyadmin.yml down
+	docker-compose -f docker-compose.phpmyadmin.yml up -d
 
 deploy_tomcat:
 	docker-compose -f docker-compose.tomcat.yml down
