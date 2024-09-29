@@ -1,4 +1,5 @@
 PYTHON := $(shell command -v python3 || command -v python)
+MYSQL_ROOT_PASSWORD := $(shell grep MYSQL_ROOT_PASSWORD .env | cut -d '=' -f2)
 
 deploy:
 	make deploy_database
@@ -12,12 +13,12 @@ deploy_database:
 
 deploy_mysqldb:
 	docker-compose down
-	docker-compose --env-file .env up -d
+	docker-compose build --no-cache && docker-compose up -d
 
 deploy_phpmyadmin:
 	make deploy_mysqldb
 	docker-compose -f docker-compose.phpmyadmin.yml down
-	docker-compose -f docker-compose.phpmyadmin.yml --env-file .env up -d
+	docker-compose -f docker-compose.phpmyadmin.yml up -d
 	
 
 deploy_tomcat:
