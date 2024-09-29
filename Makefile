@@ -1,7 +1,6 @@
 PYTHON := $(shell command -v python3 || command -v python)
-MYSQL_ROOT_PASSWORD := $(shell grep MYSQL_ROOT_PASSWORD .env | cut -d '=' -f2)
 
-deploy:
+deployAll:
 	make deploy_database
 	make deploy_tomcat
 
