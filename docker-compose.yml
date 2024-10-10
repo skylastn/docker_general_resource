@@ -9,7 +9,7 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - ${MYSQL_PORT}:3306
+      - "[::]:${MYSQL_PORT}:3306"
     volumes:
       - ${MYSQL_DATA_PATH}
 
