@@ -40,6 +40,10 @@ deploy_redisdb:
 deploy_tomcat:
 	docker-compose -f docker-compose.tomcat.yml down
 	docker-compose -f docker-compose.tomcat.yml up -d
+
+deploy_telegram_server:
+	docker-compose -f docker-compose.telegram.yml down
+	docker-compose -f docker-compose.telegram.yml up -d
 	
 run_backup_telegram:
 	${PYTHON} backup_tele.py
