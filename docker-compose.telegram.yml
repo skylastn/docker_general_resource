@@ -4,7 +4,7 @@ services:
   telegram-bot-api:
     image: ghcr.io/lukaszraczylo/tdlib-telegram-bot-api-docker/telegram-api-server:latest
     ports:
-      - "2000:8081"
+      - "${TELEGRAM_API_PORT}:8081"
     environment:
       TELEGRAM_API_ID: ${TELEGRAM_API_ID}
       TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
