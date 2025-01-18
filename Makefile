@@ -1,4 +1,10 @@
-PYTHON := $(shell command -v python3 || command -v python)
+ifeq ($(OS),Windows_NT)
+    PYTHON := $(shell py -c "import sys; print(sys.executable)" 2>nul || where python 2>nul || where python3 2>nul)
+    COPY_CMD := copy
+else
+    PYTHON := $(shell command -v python3 || command -v python)
+    COPY_CMD := cp
+endif
 
 deployAll:
 	make deploy_database
@@ -44,7 +50,12 @@ deploy_tomcat:
 deploy_telegram_server:
 	docker-compose -f docker-compose.telegram.yml down
 	docker-compose -f docker-compose.telegram.yml up -d
-	
+
+deploy_postgres_admin:
+	docker-compose -f docker-compose.pgadmin.yml down
+	docker-compose -f docker-compose.pgadmin.yml build --no-cache
+	docker-compose -f docker-compose.pgadmin.yml up -d
+
 run_backup_telegram:
 	${PYTHON} backup_tele.py
 

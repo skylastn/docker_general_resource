@@ -1,0 +1,10 @@
+version: '3'
+services:
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: PGAdmin-Service
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "${PGADMIN_PORT}:80"
