@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "${RABBIT_PORT}:5672"  # Port untuk AMQP
+      - "${RABBIT_WEB_PORT}:15672"  # Port untuk RabbitMQ Management Web UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: always
+
+volumes:
+  rabbitmq_data:
+    driver: local
