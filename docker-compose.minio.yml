@@ -2,8 +2,9 @@ version: '3.9'
 
 services:
   minio:
-    image: minio/minio
+    image: "${MINIO_IMAGE}"
     restart: unless-stopped
+    container_name: minio
     ports:
       - "${MINIO_PORT}:9000"
       - "${MINIO_UI_PORT}:9001"  # Fixed port for Web UI
