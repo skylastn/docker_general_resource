@@ -11,7 +11,7 @@ services:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
     volumes:
-      - "${MINIO_FILE_PATH}:/data"
+      - "${MINIO_VOLUME}:/data"
     command: server /data --console-address :9001
     deploy:
       resources:
