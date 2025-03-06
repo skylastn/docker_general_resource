@@ -1,0 +1,23 @@
+version: '3.9'
+
+services:
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    ports:
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_UI_PORT}:9001"  # Fixed port for Web UI
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+    volumes:
+      - "${MINIO_FILE_PATH}:/data"
+    command: server /data --console-address :9001
+    deploy:
+      resources:
+        limits:
+          memory: "${MINIO_RAM}"
+          cpus: "${MINIO_CPU}"
+
+volumes:
+  minio_data:

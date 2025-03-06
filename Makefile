@@ -51,6 +51,10 @@ deploy_tomcat:
 	docker compose -f docker-compose.tomcat.yml down
 	docker compose -f docker-compose.tomcat.yml up -d
 
+deploy_minio:
+	docker compose -f docker-compose.minio.yml down
+	docker compose -f docker-compose.minio.yml up -d
+
 deploy_telegram_server:
 	docker compose -f docker-compose.telegram.yml down
 	docker compose -f docker-compose.telegram.yml up -d
