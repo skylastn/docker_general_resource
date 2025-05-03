@@ -13,6 +13,8 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: always
+    mem_limit: ${LIMIT_RAM}g
+    cpus: ${LIMIT_CPU}
 
 volumes:
   rabbitmq_data:

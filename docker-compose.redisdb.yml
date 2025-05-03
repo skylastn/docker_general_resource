@@ -5,3 +5,5 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    mem_limit: ${LIMIT_RAM}g
+    cpus: ${LIMIT_CPU}

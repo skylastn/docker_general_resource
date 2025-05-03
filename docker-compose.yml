@@ -12,6 +12,8 @@ services:
       - ${MYSQL_PORT}:3306
     volumes:
       - ${MYSQL_DATA_PATH}
+    mem_limit: ${LIMIT_RAM}g
+    cpus: ${LIMIT_CPU}
 
 volumes:
   mysql_data:

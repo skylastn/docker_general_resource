@@ -1,7 +1,7 @@
 services:
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
-    container_name: phpmyadmin-service  # Menetapkan nama container untuk phpmyadmin
+    container_name: phpmyadmin-service # Menetapkan nama container untuk phpmyadmin
     restart: always
     volumes:
       - ./php.ini:/usr/local/etc/php/conf.d/php.ini
@@ -10,6 +10,8 @@ services:
     environment:
       PMA_HOST: db
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    mem_limit: ${LIMIT_RAM}g
+    cpus: ${LIMIT_CPU}
 
 volumes:
   mysql_data:

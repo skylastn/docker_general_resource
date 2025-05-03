@@ -10,6 +10,8 @@ services:
       - "1433:1433"  # Memetakan port MSSQL ke port host
     volumes:
       - mssql_data:/var/opt/mssql 
+    mem_limit: ${LIMIT_RAM}g
+    cpus: ${LIMIT_CPU}
 
 volumes:
   mssql_data:
