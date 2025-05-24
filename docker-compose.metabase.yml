@@ -1,0 +1,21 @@
+services:
+  metabase:
+    image: metabase/metabase
+    container_name: metabase-service
+    ports:
+      - "${METABASE_PORT}:3000"
+    environment:
+      MB_DB_FILE: ${MB_DB_FILE}
+      MB_SETUP_ADMIN_EMAIL: ${MB_SETUP_ADMIN_EMAIL}
+      MB_SETUP_ADMIN_PASSWORD: ${MB_SETUP_ADMIN_PASSWORD}
+      MB_SETUP_ADMIN_NAME: ${MB_SETUP_ADMIN_NAME}
+    volumes:
+      - metabase-data:/metabase-data
+    deploy:
+      resources:
+        limits:
+          memory: ${LIMIT_RAM}g
+          cpus: '${LIMIT_CPU}'
+
+volumes:
+  metabase-data:

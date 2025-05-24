@@ -64,6 +64,11 @@ deploy_postgres_admin:
 	docker-compose -f docker-compose.pgadmin.yml build --no-cache
 	docker-compose -f docker-compose.pgadmin.yml up -d
 
+deploy_metabase:
+	docker-compose -f docker-compose.metabase.yml down
+	docker-compose -f docker-compose.metabase.yml build --no-cache
+	docker-compose -f docker-compose.metabase.yml up -d
+
 run_backup_telegram:
 	${PYTHON} backup_tele.py
 
