@@ -6,16 +6,6 @@ else
     COPY_CMD := cp
 endif
 
-deployAll:
-	make deploy_database
-	make deploy_tomcat
-
-deploy_database:
-	make deploy_phpmyadmin
-	make deploy_mongodb
-	make deploy_mssqldb
-	make deploy_redisdb
-
 deploy_mysqldb:
 	docker compose down
 	docker compose build --no-cache && docker compose up -d

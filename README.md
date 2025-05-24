@@ -26,12 +26,6 @@ This repository provides an automated deployment system for various services usi
 
 ## 🎯 Command Structure
 
-### 🔄 Core Deployment
-| Command             | Description                          |
-|---------------------|--------------------------------------|
-| `deployAll`         | Deploy all databases + Tomcat       |
-| `deploy_database`   | Deploy all database services        |
-
 ### 🗃️ Database Services
 | Command                   | Service               | Config File                     |
 |---------------------------|-----------------------|---------------------------------|
