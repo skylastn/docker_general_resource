@@ -103,3 +103,8 @@ make deploy_[service_name]
 - Rebuild images with --no-cache for updates (e.g., docker compose build --no-cache).
 
 - Always run docker compose down before redeploying a service.
+
+Note :
+- if you want to use theme , just clone it from https://www.phpmyadmin.net/themes/
+example git clone https://github.com/movahhedi/blueberry-pma-theme.git themes/blueberry
+adjust volume themes on phpmyadmin.yml theme folder

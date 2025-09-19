@@ -1,10 +1,11 @@
 services:
   phpmyadmin:
-    image: phpmyadmin/phpmyadmin
+    image: phpmyadmin/latest
     container_name: phpmyadmin-service # Menetapkan nama container untuk phpmyadmin
     restart: always
     volumes:
       - ./php.ini:/usr/local/etc/php/conf.d/php.ini
+      - ./themes/blueberry:/var/www/html/themes/blueberry
     ports:
       - "8081:80"
     environment:
