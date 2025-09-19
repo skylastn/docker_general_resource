@@ -1,6 +1,6 @@
 services:
   phpmyadmin:
-    image: phpmyadmin/latest
+    image: phpmyadmin:latest
     container_name: phpmyadmin-service # Menetapkan nama container untuk phpmyadmin
     restart: always
     volumes:
