@@ -4,7 +4,7 @@ services:
     container_name: phpmyadmin-service # Menetapkan nama container untuk phpmyadmin
     restart: always
     volumes:
-      - ./php.ini:/usr/local/etc/php/conf.d/php.ini
+      - ./php.ini:/usr/local/etc/php/conf.d/zzz-overrides.ini
       - ./themes/blueberry/blueberry:/var/www/html/themes/pmahomme
     ports:
       - "8081:80"
