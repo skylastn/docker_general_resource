@@ -1,12 +1,21 @@
 services:
   mongodb:
-    image: mongo:latest  # Menggunakan image MongoDB terbaru
-    container_name: mongodb-service 
-    restart: always 
+    image: mongo:latest
+    container_name: mongodb
+    restart: unless-stopped
     ports:
-      - "27017:27017"  # Memetakan port MongoDB ke port host
+      - "${MONGO_PORT}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: "${MONGO_USERNAME}"
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_PASSWORD}"
     volumes:
-      - mongo_data:/data/db  # Menggunakan volume untuk persistensi data
-  
+      - mongo_data:/data/db
+    networks:
+      - mongo-net
+
 volumes:
   mongo_data:
+
+networks:
+  mongo-net:
+    name: mongo-net

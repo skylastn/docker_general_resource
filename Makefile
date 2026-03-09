@@ -20,6 +20,12 @@ deploy_mongodb:
 	docker compose -f docker-compose.mongodb.yml build --no-cache
 	docker compose -f docker-compose.mongodb.yml up -d
 
+deploy_mongo_express:
+	make deploy_mongodb
+	docker compose -f docker-compose.mongoexpress.yml down
+	docker compose -f docker-compose.mongoexpress.yml build --no-cache
+	docker compose -f docker-compose.mongoexpress.yml up -d
+
 deploy_postgresdb:
 	docker compose -f docker-compose.postgredb.yml down
 	docker compose -f docker-compose.postgredb.yml build --no-cache
@@ -58,6 +64,11 @@ deploy_metabase:
 	docker-compose -f docker-compose.metabase.yml down
 	docker-compose -f docker-compose.metabase.yml build --no-cache
 	docker-compose -f docker-compose.metabase.yml up -d
+
+deploy_dbviewer:
+	docker-compose -f docker-compose.dbviewer.yml down
+	docker-compose -f docker-compose.dbviewer.yml build --no-cache
+	docker-compose -f docker-compose.dbviewer.yml up -d
 
 run_backup_telegram:
 	${PYTHON} backup_tele.py

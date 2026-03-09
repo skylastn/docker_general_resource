@@ -1,0 +1,16 @@
+services:
+  db-admin:
+    image: dbeaver/cloudbeaver
+    container_name: db-admin
+    restart: always
+    ports:
+      - "${DBVIEWER_PORT}:8978"
+    mem_limit: 1000m
+    mem_reservation: 500m
+    memswap_limit: 2000m
+    cpus: 1.0
+    volumes:
+      - cloudbeaver-data:/opt/cloudbeaver/workspace
+
+volumes:
+  cloudbeaver-data:
