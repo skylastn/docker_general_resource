@@ -1,9 +1,11 @@
 ifeq ($(OS),Windows_NT)
     PYTHON := $(shell py -c "import sys; print(sys.executable)" 2>nul || where python 2>nul || where python3 2>nul)
     COPY_CMD := copy
+	VENV_PY := .venv/Scripts/python.exe
 else
     PYTHON := $(shell command -v python3 || command -v python)
     COPY_CMD := cp
+	VENV_PY := .venv/bin/python
 endif
 
 deploy_mysqldb:
@@ -71,10 +73,15 @@ deploy_dbviewer:
 	docker-compose -f docker-compose.dbviewer.yml up -d
 
 run_backup_telegram:
-	${PYTHON} backup_tele.py
+	$(VENV_PY) backup_tele.py
 
 run_backup_discord:
-	${PYTHON} backup_discord.py
+	$(VENV_PY) backup_discord.py
 
 run_remove_file:
-	${PYTHON} remove_file.py
+	$(VENV_PY) remove_file.py
+
+installPythonRequirement:
+	$(PYTHON) -m venv .venv
+	$(VENV_PY) -m pip install --upgrade pip
+	$(VENV_PY) -m pip install -r requirements.txt
