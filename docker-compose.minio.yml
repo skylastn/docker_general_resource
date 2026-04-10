@@ -15,9 +15,10 @@ services:
       MINIO_BROWSER_REDIRECT_URL: "${MINIO_BROWSER_REDIRECT_URL}"
     volumes:
       - "${MINIO_VOLUME}:/data"
-    command:
+    entrypoint:
       - /bin/sh
       - -c
+    command:
       - unset MINIO_ROOT_USER_FILE MINIO_ROOT_PASSWORD_FILE && exec minio server /data --console-address :9001
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
