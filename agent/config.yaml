@@ -1,0 +1,10 @@
+model_list:
+  - model_name: qwen2.5:3b
+    litellm_params:
+      model: ollama/qwen2.5:3b
+      api_base: http://ollama:11434
+
+  - model_name: qwen2.5-coder:3b
+    litellm_params:
+      model: ollama/qwen2.5-coder:3b
+      api_base: http://ollama:11434
