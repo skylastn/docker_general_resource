@@ -6,3 +6,10 @@ services:
       context: D:\Kerja\Me\Demo\demo  # Path ke subdirektori yang berisi Dockerfile
     ports:
       - "7000:7000"
+    networks:
+      - general-net
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

@@ -14,6 +14,13 @@ services:
       - ${MYSQL_DATA_PATH}
     mem_limit: ${LIMIT_RAM}g
     cpus: ${LIMIT_CPU}
+    networks:
+      - general-net
 
 volumes:
   mysql_data:
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

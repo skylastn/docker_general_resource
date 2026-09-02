@@ -11,8 +11,12 @@ services:
       ME_CONFIG_MONGODB_URL: "mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:${MONGO_PORT}/"
     networks:
       - mongo-net
+      - general-net
 
 networks:
   mongo-net:
     external: true
     name: mongo-net
+  general-net:
+    name: general-net
+    driver: bridge

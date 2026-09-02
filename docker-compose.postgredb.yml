@@ -11,6 +11,13 @@ services:
       - ${POSTGRES_PORT}:5432                  
     volumes:
       - ${POSTGRES_DATA_PATH}:/var/lib/postgresql/data 
+    networks:
+      - general-net
 
 volumes:
-  postgres_data:                             
+  postgres_data:
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

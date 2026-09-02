@@ -15,7 +15,14 @@ services:
     restart: always
     mem_limit: ${LIMIT_RAM}g
     cpus: ${LIMIT_CPU}
+    networks:
+      - general-net
 
 volumes:
   rabbitmq_data:
     driver: local
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

@@ -11,6 +11,13 @@ services:
     cpus: 1.0
     volumes:
       - cloudbeaver-data:/opt/cloudbeaver/workspace
+    networks:
+      - general-net
 
 volumes:
   cloudbeaver-data:
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

@@ -8,3 +8,10 @@ services:
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
     ports:
       - "${PGADMIN_PORT}:80"
+    networks:
+      - general-net
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

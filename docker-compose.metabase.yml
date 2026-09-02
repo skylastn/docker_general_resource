@@ -11,6 +11,8 @@ services:
       MB_SETUP_ADMIN_NAME: ${MB_SETUP_ADMIN_NAME}
     volumes:
       - metabase-data:/metabase-data
+    networks:
+      - general-net
     deploy:
       resources:
         limits:
@@ -19,3 +21,8 @@ services:
 
 volumes:
   metabase-data:
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

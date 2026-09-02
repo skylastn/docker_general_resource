@@ -12,6 +12,7 @@ services:
       - mongo_data:/data/db
     networks:
       - mongo-net
+      - general-net
 
 volumes:
   mongo_data:
@@ -19,3 +20,6 @@ volumes:
 networks:
   mongo-net:
     name: mongo-net
+  general-net:
+    name: general-net
+    driver: bridge

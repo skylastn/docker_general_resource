@@ -1,0 +1,20 @@
+services:
+  router:
+    image: decolua/9router:latest
+    container_name: 9router
+    ports:
+      - "20128:20128"
+    volumes:
+      - ~/.9router:/app/data
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - PORT=20128
+      - INITIAL_PASSWORD=${INITIAL_PASSWORD}
+    restart: unless-stopped
+    networks:
+      - general-net
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

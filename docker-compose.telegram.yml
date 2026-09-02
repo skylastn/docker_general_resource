@@ -9,3 +9,10 @@ services:
       TELEGRAM_API_ID: ${TELEGRAM_API_ID}
       TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
     restart: unless-stopped
+    networks:
+      - general-net
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. Engine Ollama
   ollama:
@@ -13,6 +11,8 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
+    networks:
+      - general-net
 
   # 2. Open-WebUI
   open-webui:
@@ -27,23 +27,14 @@ services:
     depends_on:
       - ollama
     restart: unless-stopped
-
-  # 3. 9Router dengan INITIAL_PASSWORD
-  router:
-    image: decolua/9router:latest
-    container_name: 9router
-    ports:
-      - "20128:20128"
-    volumes:
-      - ~/.9router:/root/.9router
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - PORT=20128
-      - INITIAL_PASSWORD=${INITIAL_PASSWORD}
-    depends_on:
-      - ollama
-    restart: unless-stopped
+    networks:
+      - general-net
 
 volumes:
   ollama_data:
   open-webui_data:
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge
