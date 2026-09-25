@@ -8,74 +8,77 @@ else
 	VENV_PY := .venv/bin/python
 endif
 
+# compose v2 plugin if present, else standalone docker-compose binary
+COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo docker compose || echo docker-compose)
+
 deploy_mysqldb:
-	docker compose down
-	docker compose build --no-cache && docker compose up -d
+	$(COMPOSE) down
+	$(COMPOSE) build --no-cache && $(COMPOSE) up -d
 
 deploy_phpmyadmin:
 	make deploy_mysqldb
-	docker compose -f docker-compose.phpmyadmin.yml down
-	docker compose -f docker-compose.phpmyadmin.yml up -d
+	$(COMPOSE) -f docker-compose.phpmyadmin.yml down
+	$(COMPOSE) -f docker-compose.phpmyadmin.yml up -d
 
 deploy_mongodb:
-	docker compose -f docker-compose.mongodb.yml down
-	docker compose -f docker-compose.mongodb.yml build --no-cache
-	docker compose -f docker-compose.mongodb.yml up -d
+	$(COMPOSE) -f docker-compose.mongodb.yml down
+	$(COMPOSE) -f docker-compose.mongodb.yml build --no-cache
+	$(COMPOSE) -f docker-compose.mongodb.yml up -d
 
 deploy_mongo_express:
 	make deploy_mongodb
-	docker compose -f docker-compose.mongoexpress.yml down
-	docker compose -f docker-compose.mongoexpress.yml build --no-cache
-	docker compose -f docker-compose.mongoexpress.yml up -d
+	$(COMPOSE) -f docker-compose.mongoexpress.yml down
+	$(COMPOSE) -f docker-compose.mongoexpress.yml build --no-cache
+	$(COMPOSE) -f docker-compose.mongoexpress.yml up -d
 
 deploy_postgresdb:
-	docker compose -f docker-compose.postgredb.yml down
-	docker compose -f docker-compose.postgredb.yml build --no-cache
-	docker compose -f docker-compose.postgredb.yml up -d
+	$(COMPOSE) -f docker-compose.postgredb.yml down
+	$(COMPOSE) -f docker-compose.postgredb.yml build --no-cache
+	$(COMPOSE) -f docker-compose.postgredb.yml up -d
 
 deploy_mssqldb:
-	docker compose -f docker-compose.mssqldb.yml down
-	docker compose -f docker-compose.mssqldb.yml up -d
+	$(COMPOSE) -f docker-compose.mssqldb.yml down
+	$(COMPOSE) -f docker-compose.mssqldb.yml up -d
 
 deploy_redisdb:
-	docker compose -f docker-compose.redisdb.yml down
-	docker compose -f docker-compose.redisdb.yml up -d
+	$(COMPOSE) -f docker-compose.redisdb.yml down
+	$(COMPOSE) -f docker-compose.redisdb.yml up -d
 
 deploy_rabbitmq:
-	docker compose -f docker-compose.rabbitmq.yml down
-	docker compose -f docker-compose.rabbitmq.yml up -d
+	$(COMPOSE) -f docker-compose.rabbitmq.yml down
+	$(COMPOSE) -f docker-compose.rabbitmq.yml up -d
 	
 deploy_tomcat:
-	docker compose -f docker-compose.tomcat.yml down
-	docker compose -f docker-compose.tomcat.yml up -d
+	$(COMPOSE) -f docker-compose.tomcat.yml down
+	$(COMPOSE) -f docker-compose.tomcat.yml up -d
 
 deploy_minio:
-	docker compose -f docker-compose.minio.yml down
-	docker compose -f docker-compose.minio.yml up -d
+	$(COMPOSE) -f docker-compose.minio.yml down
+	$(COMPOSE) -f docker-compose.minio.yml up -d
 
 deploy_telegram_server:
-	docker compose -f docker-compose.telegram.yml down
-	docker compose -f docker-compose.telegram.yml up -d
+	$(COMPOSE) -f docker-compose.telegram.yml down
+	$(COMPOSE) -f docker-compose.telegram.yml up -d
 
 deploy_postgres_admin:
-	docker-compose -f docker-compose.pgadmin.yml down
-	docker-compose -f docker-compose.pgadmin.yml build --no-cache
-	docker-compose -f docker-compose.pgadmin.yml up -d
+	$(COMPOSE) -f docker-compose.pgadmin.yml down
+	$(COMPOSE) -f docker-compose.pgadmin.yml build --no-cache
+	$(COMPOSE) -f docker-compose.pgadmin.yml up -d
 
 deploy_metabase:
-	docker-compose -f docker-compose.metabase.yml down
-	docker-compose -f docker-compose.metabase.yml build --no-cache
-	docker-compose -f docker-compose.metabase.yml up -d
+	$(COMPOSE) -f docker-compose.metabase.yml down
+	$(COMPOSE) -f docker-compose.metabase.yml build --no-cache
+	$(COMPOSE) -f docker-compose.metabase.yml up -d
 
 deploy_dbviewer:
-	docker-compose -f docker-compose.dbviewer.yml down
-	docker-compose -f docker-compose.dbviewer.yml build --no-cache
-	docker-compose -f docker-compose.dbviewer.yml up -d
+	$(COMPOSE) -f docker-compose.dbviewer.yml down
+	$(COMPOSE) -f docker-compose.dbviewer.yml build --no-cache
+	$(COMPOSE) -f docker-compose.dbviewer.yml up -d
 
 deploy_gitlab_runner:
-	docker compose -f agent/docker-compose.gitlab-runner.yml down
-	docker compose -f agent/docker-compose.gitlab-runner.yml build --no-cache
-	docker compose -f agent/docker-compose.gitlab-runner.yml up -d
+	$(COMPOSE) -f agent/docker-compose.gitlab-runner.yml down
+	$(COMPOSE) -f agent/docker-compose.gitlab-runner.yml build --no-cache
+	$(COMPOSE) -f agent/docker-compose.gitlab-runner.yml up -d
 
 # one-time: make register_gitlab_runner RUNNER_TOKEN=glrt-xxxx [GITLAB_URL=https://gitlab.com]
 register_gitlab_runner:
