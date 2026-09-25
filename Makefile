@@ -86,7 +86,9 @@ register_gitlab_runner:
 	docker exec gitlab-runner gitlab-runner register --non-interactive \
 		--url $${GITLAB_URL:-https://gitlab.com} \
 		--token $${RUNNER_TOKEN} --executor docker \
-		--docker-image alpine:latest --description "local-runner"
+		--docker-image alpine:latest --description "local-runner" \
+		--docker-volumes "/var/run/docker.sock:/var/run/docker.sock" \
+		--docker-volumes "/cache"
 
 run_backup_telegram:
 	$(VENV_PY) backup_tele.py
