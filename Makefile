@@ -82,6 +82,7 @@ deploy_gitlab_runner:
 
 # one-time: make register_gitlab_runner RUNNER_TOKEN=glrt-xxxx [GITLAB_URL=https://gitlab.com]
 register_gitlab_runner:
+	@test -n "$$RUNNER_TOKEN" || { echo "ERROR: RUNNER_TOKEN missing (get it: GitLab > Settings > CI/CD > Runners > New project runner)"; echo 'usage: make register_gitlab_runner RUNNER_TOKEN=glrt-xxxx [GITLAB_URL=https://gitlab.com]'; exit 1; }
 	docker exec gitlab-runner gitlab-runner register --non-interactive \
 		--url $${GITLAB_URL:-https://gitlab.com} \
 		--token $${RUNNER_TOKEN} --executor docker \
