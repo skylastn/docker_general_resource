@@ -1,6 +1,6 @@
 services:
   postgredb:
-    image: postgres:latest  # Menggunakan image PostgreSQL
+    image: postgres:18  # pinned to running data dir (postgres:latest == 18)
     container_name: postgres-service
     restart: always
     environment:
@@ -19,6 +19,10 @@ services:
       start_period: 30s
     networks:
       - general-net
+
+volumes:
+  postgres18_data: # referenced by current POSTGRES_DATA_PATH
+  postgres_data: # referenced by .env.example default
 
 networks:
   general-net:

@@ -23,6 +23,9 @@ services:
     networks:
       - general-net
 
+volumes:
+  mysql_data: # referenced by MYSQL_DATA_PATH (mysql_data:/var/lib/mysql)
+
 networks:
   general-net:
     name: general-net

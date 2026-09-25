@@ -72,6 +72,18 @@ deploy_dbviewer:
 	docker-compose -f docker-compose.dbviewer.yml build --no-cache
 	docker-compose -f docker-compose.dbviewer.yml up -d
 
+deploy_gitlab_runner:
+	docker compose -f agent/docker-compose.gitlab-runner.yml down
+	docker compose -f agent/docker-compose.gitlab-runner.yml build --no-cache
+	docker compose -f agent/docker-compose.gitlab-runner.yml up -d
+
+# one-time: make register_gitlab_runner RUNNER_TOKEN=glrt-xxxx [GITLAB_URL=https://gitlab.com]
+register_gitlab_runner:
+	docker exec gitlab-runner gitlab-runner register --non-interactive \
+		--url $${GITLAB_URL:-https://gitlab.com} \
+		--token $${RUNNER_TOKEN} --executor docker \
+		--docker-image alpine:latest --description "local-runner"
+
 run_backup_telegram:
 	$(VENV_PY) backup_tele.py
 
