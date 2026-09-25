@@ -1,10 +1,7 @@
 FROM mysql:8.4
 
-# Copy your custom configuration file
-COPY my.cnf /etc/mysql/conf.d/my.cnf
-
-# Set the correct permissions for my.cnf
-RUN chmod 644 /etc/mysql/conf.d/my.cnf
+# Config in one layer (COPY --chmod replaces a separate chmod RUN layer)
+COPY --chmod=0644 my.cnf /etc/mysql/conf.d/my.cnf
 
 # Start MySQL
 CMD ["mysqld"]

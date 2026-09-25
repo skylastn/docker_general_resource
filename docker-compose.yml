@@ -9,16 +9,19 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - ${MYSQL_PORT}:3306
+      - "${BIND_IP:-127.0.0.1}:${MYSQL_PORT}:3306"
     volumes:
       - ${MYSQL_DATA_PATH}
     mem_limit: ${LIMIT_RAM}g
     cpus: ${LIMIT_CPU}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - general-net
-
-volumes:
-  mysql_data:
 
 networks:
   general-net:

@@ -8,14 +8,17 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - ${POSTGRES_PORT}:5432                  
+      - "${BIND_IP:-127.0.0.1}:${POSTGRES_PORT}:5432"            
     volumes:
       - ${POSTGRES_DATA_PATH}:/var/lib/postgresql/data 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DATABASE"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - general-net
-
-volumes:
-  postgres_data:
 
 networks:
   general-net:

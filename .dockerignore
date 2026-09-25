@@ -1,0 +1,4 @@
+# mysql build needs only the Dockerfile inputs; keeps .venv/themes/backups (180M+) out of the build context
+*
+!Dockerfile
+!my.cnf

@@ -1,18 +1,22 @@
-version: '3.8'
-
 services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
-      - "${RABBIT_PORT}:5672"  # Port untuk AMQP
-      - "${RABBIT_WEB_PORT}:15672"  # Port untuk RabbitMQ Management Web UI
+      - "${BIND_IP:-127.0.0.1}:${RABBIT_PORT}:5672"  # Port untuk AMQP
+      - "${BIND_IP:-127.0.0.1}:${RABBIT_WEB_PORT}:15672"  # Port untuk RabbitMQ Management Web UI
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBIT_USERNAME}
       RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     mem_limit: ${LIMIT_RAM}g
     cpus: ${LIMIT_CPU}
     networks:

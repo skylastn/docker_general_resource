@@ -4,7 +4,7 @@ services:
     image: ollama/ollama:latest
     container_name: ollama
     ports:
-      - "11434:11434"
+      - "${BIND_IP:-127.0.0.1}:11434:11434"
     environment:
       - OLLAMA_MAX_LOADED_MODELS=2 # Mengizinkan 2 model stanby bersamaan di RAM
       - OLLAMA_NUM_PARALLEL=2      # Mengizinkan 2 request diproses secara simultan
@@ -19,7 +19,7 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     ports:
-      - "3000:8080"
+      - "${BIND_IP:-127.0.0.1}:3000:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
     volumes:

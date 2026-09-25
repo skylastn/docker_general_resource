@@ -3,7 +3,7 @@ services:
     image: metabase/metabase
     container_name: metabase-service
     ports:
-      - "${METABASE_PORT}:3000"
+      - "${BIND_IP:-127.0.0.1}:${METABASE_PORT}:3000"
     environment:
       MB_DB_FILE: ${MB_DB_FILE}
       MB_SETUP_ADMIN_EMAIL: ${MB_SETUP_ADMIN_EMAIL}

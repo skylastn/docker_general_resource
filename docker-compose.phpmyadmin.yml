@@ -7,7 +7,7 @@ services:
       - ./php.ini:/usr/local/etc/php/conf.d/zzz-overrides.ini
       - ./themes/blueberry/blueberry:/var/www/html/themes/pmahomme
     ports:
-      - "8081:80"
+      - "${BIND_IP:-127.0.0.1}:8081:80"
     environment:
       PMA_HOST: db
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -15,9 +15,6 @@ services:
     cpus: ${LIMIT_CPU}
     networks:
       - general-net
-
-volumes:
-  mysql_data:
 
 networks:
   general-net:

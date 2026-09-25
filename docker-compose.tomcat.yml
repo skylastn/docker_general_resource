@@ -5,7 +5,7 @@ services:
     build:
       context: D:\Kerja\Me\Demo\demo  # Path ke subdirektori yang berisi Dockerfile
     ports:
-      - "7000:7000"
+      - "${BIND_IP:-127.0.0.1}:7000:7000"
     networks:
       - general-net
 

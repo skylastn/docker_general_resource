@@ -3,7 +3,7 @@ services:
     image: decolua/9router:latest
     container_name: 9router
     ports:
-      - "20128:20128"
+      - "${BIND_IP:-127.0.0.1}:20128:20128"
     volumes:
       - ~/.9router:/app/data
     environment:
