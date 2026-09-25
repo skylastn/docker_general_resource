@@ -1,0 +1,4 @@
+FROM gitlab/gitlab-runner:latest
+
+# docker CLI so the runner can use the docker executor via the host socket
+RUN command -v docker || (apt-get update && apt-get install -y --no-install-recommends docker.io && rm -rf /var/lib/apt/lists/*)

@@ -1,0 +1,27 @@
+services:
+  gitlab-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.gitlab-runner
+    image: gitlab-runner:local
+    container_name: gitlab-runner
+    restart: unless-stopped
+    volumes:
+      - gitlab_runner_config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - general-net
+
+# Register once, then the runner picks up jobs:
+#   docker exec -it gitlab-runner gitlab-runner register \
+#     --non-interactive --url https://gitlab.com \
+#     --token $RUNNER_TOKEN --executor docker \
+#     --docker-image alpine:latest --description "local-runner"
+
+volumes:
+  gitlab_runner_config:
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge
