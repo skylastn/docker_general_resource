@@ -89,6 +89,11 @@ deploy_9router:
 	$(COMPOSE) -f agent/docker-compose.9router.yml down
 	$(COMPOSE) -f agent/docker-compose.9router.yml up -d
 
+deploy_github_runner:
+	$(COMPOSE) -f agent/docker-compose.github-runner.yml pull
+	$(COMPOSE) -f agent/docker-compose.github-runner.yml down
+	$(COMPOSE) -f agent/docker-compose.github-runner.yml up -d
+
 # one-time: make register_gitlab_runner RUNNER_TOKEN=glrt-xxxx [GITLAB_URL=https://gitlab.com]
 register_gitlab_runner:
 	@test -n "$$RUNNER_TOKEN" || { echo "ERROR: RUNNER_TOKEN missing (get it: GitLab > Settings > CI/CD > Runners > New project runner)"; echo 'usage: make register_gitlab_runner RUNNER_TOKEN=glrt-xxxx [GITLAB_URL=https://gitlab.com]'; exit 1; }
