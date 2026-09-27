@@ -15,6 +15,7 @@ import socket
 import sys
 import threading
 import time
+from collections import deque
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -203,6 +204,26 @@ def yt_name(au):
     return au.get("displayName") or au.get("authorDisplayName") or au.get("channelId") or "?"
 
 
+# liveChat first page returns recent history -> dedupe so reconnects/restarts
+# don't replay messages already sent to Discord.
+_SEEN, _SEEN_ORDER = set(), deque()
+# Google's clock as of process start: anything published earlier is replay
+# from the "most recent messages" first page (survives container restarts).
+_START = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+
+
+def seen_once(msg_id):
+    if not msg_id:
+        return False
+    if msg_id in _SEEN:
+        return True
+    _SEEN.add(msg_id)
+    _SEEN_ORDER.append(msg_id)
+    while len(_SEEN_ORDER) > 3000:
+        _SEEN.discard(_SEEN_ORDER.popleft())
+    return False
+
+
 def discover_live(key, channel_id):
     """Newest upload with an active live chat. 3 units, cached 120s.
     ponytail: assumes the live stream is the channel's latest upload; if a
@@ -269,7 +290,11 @@ def youtube_loop():
                 url += "&pageToken=" + urllib.parse.quote(page_token)
             data = http_get_json(url)
             for item in data.get("items", []):
+                if seen_once(item.get("id")):
+                    continue
                 sn, au = item.get("snippet", {}), item.get("authorDetails", {})
+                if sn.get("publishedAt") and sn["publishedAt"] < _START:
+                    continue            # pre-restart history
                 kind = sn.get("type")
                 if kind == "textMessageEvent":
                     enqueue("youtube", yt_name(au),
