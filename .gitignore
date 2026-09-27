@@ -1,3 +1,6 @@
 .env
 9router-backup-*/
 backups
+# credentials (never push)
+ssh/
+streaming/keys/

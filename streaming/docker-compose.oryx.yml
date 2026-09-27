@@ -30,8 +30,8 @@ services:
       resources:
         limits:
           # raise in .env when transcoding or forwarding to many targets at once
-          memory: ${LIMIT_RAM}g
-          cpus: '${LIMIT_CPU}'
+          memory: ${LIMIT_RAM:-1}g
+          cpus: '${LIMIT_CPU:-1.0}'
 
 volumes:
   oryx_data:
