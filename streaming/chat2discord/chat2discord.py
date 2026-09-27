@@ -194,15 +194,64 @@ def extract_video_id(raw):
     return raw if re.fullmatch(r"[\w-]{11}", raw) else ""
 
 
+_discover_at = [0.0]
+_uploads_pl = [None]            # cached uploads playlist of the channel
+
+
+def yt_name(au):
+    """liveChat authorDetails has displayName (handle), not authorDisplayName."""
+    return au.get("displayName") or au.get("authorDisplayName") or au.get("channelId") or "?"
+
+
+def discover_live(key, channel_id):
+    """Newest upload with an active live chat. 3 units, cached 120s.
+    ponytail: assumes the live stream is the channel's latest upload; if a
+    pre-recorded upload goes above it, set youtube.video_url instead."""
+    now = time.time()
+    if now - _discover_at[0] < 120:
+        return ""
+    _discover_at[0] = now
+    q = urllib.parse.quote
+    if not _uploads_pl[0]:
+        d = http_get_json("https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=%s&key=%s" % (q(channel_id), q(key)))
+        items = d.get("items") or []
+        if not items:
+            return ""
+        _uploads_pl[0] = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    d = http_get_json("https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=%s&maxResults=1&key=%s" % (q(_uploads_pl[0]), q(key)))
+    vids = [i.get("contentDetails", {}).get("videoId") for i in d.get("items", []) if i.get("contentDetails", {}).get("videoId")]
+    if not vids:
+        return ""
+    d = http_get_json("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s&key=%s" % (q(vids[0]), q(key)))
+    det = (d.get("items") or [{}])[0].get("liveStreamingDetails", {})
+    return vids[0] if det.get("activeLiveChatId") else ""
+
+
 def youtube_loop():
-    chat_id, page_token, notify_quota = None, None, False
+    chat_id, page_token, notify_quota, idle_logged = None, None, False, False
     while True:
-        key, video = cfg_get("youtube", "api_key"), cfg_get("youtube", "video_url") or cfg_get("youtube", "video_id")
+        key = cfg_get("youtube", "api_key")
+        video = cfg_get("youtube", "video_url") or cfg_get("youtube", "video_id")
         vid = extract_video_id(video)
-        if not key or not vid:
+        if not key:
             chat_id = None
             time.sleep(15)
             continue
+        if not vid:
+            channel_id = cfg_get("youtube", "channel_id")
+            if not channel_id:
+                if not idle_logged:
+                    log("youtube idle: no video_url/channel_id set")
+                    idle_logged = True
+                chat_id = None
+                time.sleep(30)
+                continue
+            idle_logged = False
+            vid = discover_live(key, channel_id)
+            if not vid:
+                chat_id = None
+                time.sleep(30)
+                continue
         try:
             if not chat_id:
                 data = http_get_json("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s&key=%s"
@@ -223,18 +272,19 @@ def youtube_loop():
                 sn, au = item.get("snippet", {}), item.get("authorDetails", {})
                 kind = sn.get("type")
                 if kind == "textMessageEvent":
-                    enqueue("youtube", au.get("authorDisplayName", "?"),
+                    enqueue("youtube", yt_name(au),
                             sn.get("textMessageDetails", {}).get("messageText", ""),
                             au.get("profileImageUrl"))
                 elif kind == "superChatEvent":
-                    enqueue("youtube", "%s (%s %s)" % (au.get("authorDisplayName", "?"),
+                    enqueue("youtube", "%s (%s %s)" % (yt_name(au),
                                                        sn.get("superChatDetails", {}).get("amountDisplayString", ""),
                                                        sn.get("currency", "")),
                             sn.get("superChatDetails", {}).get("message", ""),
                             au.get("profileImageUrl"))
             page_token = data.get("nextPageToken")
             wait = float(data.get("pollingIntervalMillis", 5000)) / 1000.0
-            time.sleep(max(1.5, min(wait, 30)))
+            # floor 8s: liveChat list = 5 units/call, 10k units/day
+            time.sleep(max(8.0, min(wait, 30)))
             notify_quota = False
         except urllib.error.HTTPError as e:
             body = e.read().decode(errors="replace")
