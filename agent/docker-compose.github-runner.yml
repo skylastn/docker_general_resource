@@ -3,9 +3,14 @@ services:
     image: ghcr.io/actions/actions-runner:latest
     container_name: actions-runner
     restart: unless-stopped
+    entrypoint: ["/home/runner/run.sh"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - github_runner_config:/runner/_work
+      - github_runner_home:/home/runner
+    tmpfs:
+      - /tmp
+    group_add:
+      - "0"
     networks:
       - general-net
     user: "${RUNNER_UID:-1001}:${RUNNER_GID:-1001}"
@@ -16,7 +21,7 @@ services:
       - ALL
 
 volumes:
-  github_runner_config:
+  github_runner_home:
 
 networks:
   general-net:

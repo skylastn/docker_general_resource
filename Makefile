@@ -104,16 +104,26 @@ register_gitlab_runner:
 		--docker-volumes "/var/run/docker.sock:/var/run/docker.sock" \
 		--docker-volumes "/cache"
 
+# one-time: make register_github_runner GITHUB_PAT=ghp_xxx RUNNER_REPO=owner/repo [RUNNER_NAME=local-runner] [RUNNER_LABELS=self-hosted,linux,docker]
+# The PAT needs "repo" + "workflow" (or admin:org for an org runner) scope; the container
+# must be stopped while config.sh writes /home/runner, so this stops -> configures -> starts.
 register_github_runner:
-	@test -n "$$RUNNER_TOKEN" || { echo "ERROR: RUNNER_TOKEN missing"; echo 'usage: make register_github_runner RUNNER_TOKEN=xxx [RUNNER_REPO=owner/repo] [RUNNER_NAME=local-runner] [RUNNER_LABELS=self-hosted,docker]'; exit 1; }
-	RUNNER_URL=$$(if [ -n "$$RUNNER_REPO" ]; then echo "https://github.com/$${RUNNER_REPO}"; else echo "https://github.com"; fi)
-	docker exec actions-runner ./config.sh \
-		--url $${RUNNER_URL} \
-		--token $${RUNNER_TOKEN} \
-		--unattended \
-		--replace \
+	@test -n "$$GITHUB_PAT" || { echo "ERROR: GITHUB_PAT missing"; echo 'usage: make register_github_runner GITHUB_PAT=ghp_xxx RUNNER_REPO=owner/repo [RUNNER_NAME=local-runner]'; exit 1; }
+	@test -n "$$RUNNER_REPO" || { echo "ERROR: RUNNER_REPO missing (GitHub has no account-level runner: use owner/repo, or an org name)"; exit 1; }
+	RUNNER_TOKEN=$$(curl -sS -X POST -H "Authorization: Bearer $$GITHUB_PAT" \
+		-H "Accept: application/vnd.github+json" \
+		"https://api.github.com/repos/$${RUNNER_REPO}/actions/runners/registration-token" | jq -r .token); \
+	test -n "$$RUNNER_TOKEN" -a "$$RUNNER_TOKEN" != "null" || { echo "ERROR: could not get registration token for $${RUNNER_REPO}"; exit 1; }
+	$(COMPOSE) -f agent/docker-compose.github-runner.yml stop
+	docker run --rm --group-add 0 \
+		-v agent_github_runner_home:/home/runner \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		ghcr.io/actions/actions-runner:latest ./config.sh \
+		--url https://github.com/$${RUNNER_REPO} \
+		--token "$$RUNNER_TOKEN" --unattended --replace \
 		--name "$${RUNNER_NAME:-local-runner}" \
-		--labels "$${RUNNER_LABELS:-self-hosted,docker}"
+		--labels "$${RUNNER_LABELS:-self-hosted,linux,docker}"
+	$(COMPOSE) -f agent/docker-compose.github-runner.yml start
 
 run_backup_telegram:
 	$(VENV_PY) backup_tele.py
