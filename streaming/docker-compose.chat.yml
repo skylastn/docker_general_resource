@@ -1,0 +1,24 @@
+services:
+  # YouTube live chat + Twitch chat + Facebook comments -> one Discord webhook.
+  chat2discord:
+    image: python:3.12-slim
+    container_name: chat2discord
+    restart: unless-stopped
+    command: python /app/chat2discord.py
+    environment:
+      - TZ=Asia/Jakarta
+    volumes:
+      - ./chat2discord/chat2discord.py:/app/chat2discord.py:ro
+      - ./keys/chat.json:/app/config.json:ro # edited per session (video URL), reloaded without restart
+    networks:
+      - general-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.50'
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge
