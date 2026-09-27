@@ -196,6 +196,7 @@ def extract_video_id(raw):
 
 
 _discover_at = [0.0]
+_discover_vid = [""]             # last found live video id, reused inside cache window
 _uploads_pl = [None]            # cached uploads playlist of the channel
 
 
@@ -230,22 +231,25 @@ def discover_live(key, channel_id):
     pre-recorded upload goes above it, set youtube.video_url instead."""
     now = time.time()
     if now - _discover_at[0] < 120:
-        return ""
+        return _discover_vid[0]
     _discover_at[0] = now
     q = urllib.parse.quote
+    vid = ""
     if not _uploads_pl[0]:
         d = http_get_json("https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=%s&key=%s" % (q(channel_id), q(key)))
         items = d.get("items") or []
         if not items:
+            _discover_vid[0] = ""
             return ""
         _uploads_pl[0] = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
     d = http_get_json("https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=%s&maxResults=1&key=%s" % (q(_uploads_pl[0]), q(key)))
     vids = [i.get("contentDetails", {}).get("videoId") for i in d.get("items", []) if i.get("contentDetails", {}).get("videoId")]
-    if not vids:
-        return ""
-    d = http_get_json("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s&key=%s" % (q(vids[0]), q(key)))
-    det = (d.get("items") or [{}])[0].get("liveStreamingDetails", {})
-    return vids[0] if det.get("activeLiveChatId") else ""
+    if vids:
+        d = http_get_json("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s&key=%s" % (q(vids[0]), q(key)))
+        det = (d.get("items") or [{}])[0].get("liveStreamingDetails", {})
+        vid = vids[0] if det.get("activeLiveChatId") else ""
+    _discover_vid[0] = vid
+    return vid
 
 
 def youtube_loop():
