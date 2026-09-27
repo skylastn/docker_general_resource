@@ -1,0 +1,42 @@
+services:
+  oryx:
+    # Oryx (SRS Stack): RTMP/SRT ingest -> forward (restream) to YouTube/Twitch/Facebook/etc.
+    # https://github.com/ossrs/oryx
+    image: ossrs/oryx:5
+    container_name: oryx
+    restart: unless-stopped
+    ports:
+      # Management UI (Scenarios > Forward = restream destinations). Loopback by default;
+      # set BIND_IP=0.0.0.0 in .env to open it from LAN/internet.
+      - "${BIND_IP:-127.0.0.1}:${ORYX_HTTP_PORT:-2022}:2022"
+      # RTMP ingest: OBS/ffmpeg publish from another machine, so it must not be loopback.
+      - "${ORYX_RTMP_BIND:-0.0.0.0}:${ORYX_RTMP_PORT:-1935}:1935"
+      # SRT ingest: high-res/low-latency publish (optional, UDP).
+      - "${ORYX_SRT_BIND:-0.0.0.0}:${ORYX_SRT_PORT:-10080}:10080/udp"
+      # WebRTC (WHIP) publish needs this extra UDP port — uncomment only when used:
+      # - "${ORYX_RTC_BIND:-0.0.0.0}:${ORYX_RTC_PORT:-8000}:8000/udp"
+    volumes:
+      - ${ORYX_DATA_PATH:-oryx_data:/data} # console config, stream keys, forward targets
+    healthcheck:
+      # image ships no curl; bash /dev/tcp probes the mgmt HTTP port
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2022"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - general-net
+    deploy:
+      resources:
+        limits:
+          # raise in .env when transcoding or forwarding to many targets at once
+          memory: ${LIMIT_RAM}g
+          cpus: '${LIMIT_CPU}'
+
+volumes:
+  oryx_data:
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge

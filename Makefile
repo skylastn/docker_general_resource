@@ -75,6 +75,10 @@ deploy_dbviewer:
 	$(COMPOSE) -f docker-compose.dbviewer.yml build --no-cache
 	$(COMPOSE) -f docker-compose.dbviewer.yml up -d
 
+deploy_oryx:
+	$(COMPOSE) --env-file .env -f streaming/docker-compose.oryx.yml down
+	$(COMPOSE) --env-file .env -f streaming/docker-compose.oryx.yml up -d
+
 deploy_gitlab_runner:
 	$(COMPOSE) -f agent/docker-compose.gitlab-runner.yml down
 	$(COMPOSE) -f agent/docker-compose.gitlab-runner.yml build --no-cache
