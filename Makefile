@@ -104,6 +104,17 @@ register_gitlab_runner:
 		--docker-volumes "/var/run/docker.sock:/var/run/docker.sock" \
 		--docker-volumes "/cache"
 
+register_github_runner:
+	@test -n "$$RUNNER_TOKEN" || { echo "ERROR: RUNNER_TOKEN missing"; echo 'usage: make register_github_runner RUNNER_TOKEN=xxx [RUNNER_REPO=owner/repo] [RUNNER_NAME=local-runner] [RUNNER_LABELS=self-hosted,docker]'; exit 1; }
+	RUNNER_URL=$$(if [ -n "$$RUNNER_REPO" ]; then echo "https://github.com/$${RUNNER_REPO}"; else echo "https://github.com"; fi)
+	docker exec actions-runner ./config.sh \
+		--url $${RUNNER_URL} \
+		--token $${RUNNER_TOKEN} \
+		--unattended \
+		--replace \
+		--name "$${RUNNER_NAME:-local-runner}" \
+		--labels "$${RUNNER_LABELS:-self-hosted,docker}"
+
 run_backup_telegram:
 	$(VENV_PY) backup_tele.py
 
