@@ -1,5 +1,6 @@
 .env
 9router-backup-*/
+agent/data/
 backups
 # credentials (never push)
 ssh/

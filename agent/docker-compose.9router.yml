@@ -2,19 +2,30 @@ services:
   router:
     image: decolua/9router:latest
     container_name: 9router
+    user: "0:0"
     ports:
       - "${BIND_IP:-127.0.0.1}:20128:20128"
     volumes:
-      - ~/.9router:/app/data
+      - ./data:/app/data
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - PORT=20128
-      - INITIAL_PASSWORD=${INITIAL_PASSWORD}
+      OLLAMA_BASE_URL: http://ollama:11434
+      PORT: 20128
+      INITIAL_PASSWORD: ${INITIAL_PASSWORD}
     restart: unless-stopped
     networks:
       - general-net
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: 9router-cloudflared
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
+    restart: unless-stopped
+    networks:
+      - general-net
+    depends_on:
+      - router
+
 networks:
   general-net:
     name: general-net
-    driver: bridge
+    external: true
