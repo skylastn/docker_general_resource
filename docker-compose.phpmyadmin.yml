@@ -19,4 +19,4 @@ services:
 networks:
   general-net:
     name: general-net
-    driver: bridge
+    external: true
