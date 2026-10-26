@@ -10,6 +10,15 @@ let opencodeProcess = null;
 let isReady = false;
 let isShuttingDown = false;
 
+// Quota tracking & circuit breaker
+let lastQuotaExhaustedAt = 0;
+const QUOTA_COOLDOWN_MS = 60 * 1000; // 60s cooldown before retrying upstream
+
+const QUOTA_MESSAGE = "⚠️ [OpenCode Free]: Kuota model gratis OpenCode di upstream telah mencapai batas limit (Free usage limit reached). Silakan switch ke provider lain (misalnya ZCode: `zcode/glm-5.3-flash`) atau tunggu beberapa saat.";
+
+// Active pending requests mapped by sessionId
+const activeRequests = new Map();
+
 const SUPPORTED_MODELS = [
   "glm-5.3-flash-free",
   "deepseek-v4.1-flash-free",
@@ -24,7 +33,7 @@ const SUPPORTED_MODELS = [
 
 function resolveModelId(modelInput) {
   if (!modelInput) return "glm-5.3-flash-free";
-  let m = modelInput.toLowerCase().replace(/^(opencode\/|oc\/)/, "");
+  let m = modelInput.toLowerCase().replace(/^(opencode-local\/|opencode\/|oc\/)/, "");
   if (!m.endsWith("-free") && SUPPORTED_MODELS.includes(m + "-free")) {
     m = m + "-free";
   }
@@ -38,6 +47,53 @@ function resolveModelId(modelInput) {
   return "glm-5.3-flash-free";
 }
 
+function notifyQuotaExhausted(reason) {
+  console.warn(`[OpenCode Bridge] Quota exhausted detected: ${reason}`);
+  lastQuotaExhaustedAt = Date.now();
+  for (const [sId, item] of activeRequests.entries()) {
+    try {
+      item.abortController.abort(new Error("QUOTA_EXHAUSTED"));
+    } catch {}
+  }
+}
+
+// Background SSE event listener to catch session errors immediately
+async function startEventListener() {
+  while (!isShuttingDown) {
+    try {
+      const res = await fetch(`${OPENCODE_BASE}/event`);
+      if (!res.ok) {
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value);
+        for (const line of text.split("\n")) {
+          if (line.startsWith("data: ")) {
+            try {
+              const ev = JSON.parse(line.slice(6));
+              const errorText = JSON.stringify(ev);
+              if (
+                errorText.includes("Free usage limit reached") ||
+                errorText.includes("FreeUsageLimitError") ||
+                (ev.syncEvent?.data?.error?.statusCode === 429)
+              ) {
+                notifyQuotaExhausted("SSE Event 429 / FreeUsageLimitError");
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch {
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+}
+
 function startOpenCodeServer() {
   console.log(`[OpenCode Bridge] Launching opencode serve on port ${OPENCODE_PORT}...`);
   isReady = false;
@@ -45,7 +101,9 @@ function startOpenCodeServer() {
   opencodeProcess = spawn("opencode", [
     "serve",
     "--port", String(OPENCODE_PORT),
-    "--hostname", "127.0.0.1"
+    "--hostname", "127.0.0.1",
+    "--print-logs",
+    "--log-level", "INFO"
   ], {
     env: {
       ...process.env,
@@ -58,10 +116,19 @@ function startOpenCodeServer() {
     if (text.includes("opencode server listening")) {
       console.log(`[OpenCode Bridge] opencode serve is ready on 127.0.0.1:${OPENCODE_PORT}`);
       isReady = true;
+      startEventListener().catch(() => {});
     }
   });
 
-  opencodeProcess.stderr.on("data", () => {});
+  opencodeProcess.stderr.on("data", (d) => {
+    const text = d.toString();
+    if (
+      text.includes("Free usage limit reached") ||
+      text.includes("FreeUsageLimitError")
+    ) {
+      notifyQuotaExhausted("Stderr FreeUsageLimitError");
+    }
+  });
 
   opencodeProcess.on("close", (code) => {
     if (isShuttingDown) return;
@@ -87,6 +154,41 @@ async function waitForReady(maxWaitMs = 10000) {
   return false;
 }
 
+// Helper to send quota exhausted response to client
+function sendQuotaResponse(res, stream, completionId, created, modelId) {
+  if (stream) {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive"
+    });
+
+    const chunk = {
+      id: completionId,
+      object: "chat.completion.chunk",
+      created,
+      model: modelId,
+      choices: [{
+        index: 0,
+        delta: { content: QUOTA_MESSAGE },
+        finish_reason: "stop"
+      }]
+    };
+    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+    res.write("data: [DONE]\n\n");
+    res.end();
+  } else {
+    res.writeHead(429, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: {
+        message: QUOTA_MESSAGE,
+        type: "insufficient_quota",
+        code: "free_usage_limit_reached"
+      }
+    }));
+  }
+}
+
 // Forward chat completion
 async function handleChatCompletion(req, res, body) {
   let payload;
@@ -98,6 +200,19 @@ async function handleChatCompletion(req, res, body) {
     return;
   }
 
+  const modelId = resolveModelId(payload.model);
+  const stream = Boolean(payload.stream);
+  const completionId = `chatcmpl-${crypto.randomBytes(12).toString("hex")}`;
+  const created = Math.floor(Date.now() / 1000);
+
+  // 1. Check Circuit Breaker for Quota Exhaustion
+  const elapsedSinceQuota = Date.now() - lastQuotaExhaustedAt;
+  if (elapsedSinceQuota < QUOTA_COOLDOWN_MS) {
+    console.log(`[OpenCode Bridge] Fast-rejecting request due to active quota cooldown (${Math.round((QUOTA_COOLDOWN_MS - elapsedSinceQuota)/1000)}s remaining)`);
+    sendQuotaResponse(res, stream, completionId, created, modelId);
+    return;
+  }
+
   const ready = await waitForReady();
   if (!ready) {
     res.writeHead(503, { "Content-Type": "application/json" });
@@ -105,8 +220,6 @@ async function handleChatCompletion(req, res, body) {
     return;
   }
 
-  const modelId = resolveModelId(payload.model);
-  const stream = Boolean(payload.stream);
   const messages = payload.messages || [];
 
   // Split system and user prompts
@@ -123,10 +236,9 @@ async function handleChatCompletion(req, res, body) {
   }
 
   const promptText = conversationLines.length > 0 ? conversationLines.join("\n\n") : "Halo";
-  const completionId = `chatcmpl-${crypto.randomBytes(12).toString("hex")}`;
-  const created = Math.floor(Date.now() / 1000);
 
   let sessionId = null;
+  const abortController = new AbortController();
 
   try {
     // 1. Create temporary session
@@ -135,16 +247,25 @@ async function handleChatCompletion(req, res, body) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: { id: modelId, providerID: "opencode" }
-      })
+      }),
+      signal: AbortSignal.timeout(6000)
     });
 
     if (!sRes.ok) {
       const errText = await sRes.text();
+      if (errText.includes("Free usage limit reached")) {
+        notifyQuotaExhausted("Session creation limit");
+        sendQuotaResponse(res, stream, completionId, created, modelId);
+        return;
+      }
       throw new Error(`Failed to create opencode session: ${sRes.status} ${errText}`);
     }
 
     const sessionData = await sRes.json();
     sessionId = sessionData.id;
+
+    // Track active request
+    activeRequests.set(sessionId, { abortController, res, stream, completionId, created, modelId });
 
     // 2. Send message
     const msgPayload = {
@@ -158,11 +279,17 @@ async function handleChatCompletion(req, res, body) {
     const mRes = await fetch(`${OPENCODE_BASE}/session/${sessionId}/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(msgPayload)
+      body: JSON.stringify(msgPayload),
+      signal: abortController.signal
     });
 
     if (!mRes.ok) {
       const errText = await mRes.text();
+      if (errText.includes("Free usage limit reached") || mRes.status === 429) {
+        notifyQuotaExhausted("Message endpoint 429");
+        sendQuotaResponse(res, stream, completionId, created, modelId);
+        return;
+      }
       throw new Error(`Failed to send message: ${mRes.status} ${errText}`);
     }
 
@@ -225,15 +352,34 @@ async function handleChatCompletion(req, res, body) {
       }));
     }
   } catch (err) {
+    const isQuotaError =
+      err?.message === "QUOTA_EXHAUSTED" ||
+      String(err?.message || "").includes("Free usage limit reached");
+
+    if (isQuotaError) {
+      console.warn("[OpenCode Bridge] Handling caught quota error for client");
+      sendQuotaResponse(res, stream, completionId, created, modelId);
+      return;
+    }
+
     console.error("[OpenCode Bridge] Request error:", err.message);
     if (!res.headersSent) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: { message: err.message || "Internal error" } }));
+      const isTimeout = err.name === "TimeoutError" || String(err.message).includes("timed out");
+      const status = isTimeout ? 504 : 500;
+      res.writeHead(status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: {
+          message: isTimeout
+            ? "OpenCode upstream timed out. Server sibuk atau sedang throttling."
+            : (err.message || "Internal error")
+        }
+      }));
     } else {
       res.end();
     }
   } finally {
     if (sessionId) {
+      activeRequests.delete(sessionId);
       fetch(`${OPENCODE_BASE}/session/${sessionId}`, { method: "DELETE" }).catch(() => {});
     }
   }
@@ -253,7 +399,11 @@ const server = http.createServer((req, res) => {
 
   if (req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", ready: isReady }));
+    res.end(JSON.stringify({
+      status: "ok",
+      ready: isReady,
+      quotaExhausted: (Date.now() - lastQuotaExhaustedAt < QUOTA_COOLDOWN_MS)
+    }));
     return;
   }
 
