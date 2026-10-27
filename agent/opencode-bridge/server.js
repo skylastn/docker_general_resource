@@ -98,7 +98,7 @@ function startOpenCodeServer() {
   console.log(`[OpenCode Bridge] Launching opencode serve on port ${OPENCODE_PORT}...`);
   isReady = false;
 
-  opencodeProcess = spawn("opencode", [
+  opencodeProcess = spawn(process.env.OPENCODE_BIN || "/opt/homebrew/bin/opencode", [
     "serve",
     "--port", String(OPENCODE_PORT),
     "--hostname", "127.0.0.1",
@@ -155,38 +155,15 @@ async function waitForReady(maxWaitMs = 10000) {
 }
 
 // Helper to send quota exhausted response to client
-function sendQuotaResponse(res, stream, completionId, created, modelId) {
-  if (stream) {
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive"
-    });
-
-    const chunk = {
-      id: completionId,
-      object: "chat.completion.chunk",
-      created,
-      model: modelId,
-      choices: [{
-        index: 0,
-        delta: { content: QUOTA_MESSAGE },
-        finish_reason: "stop"
-      }]
-    };
-    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-    res.write("data: [DONE]\n\n");
-    res.end();
-  } else {
-    res.writeHead(429, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: {
-        message: QUOTA_MESSAGE,
-        type: "insufficient_quota",
-        code: "free_usage_limit_reached"
-      }
-    }));
-  }
+function sendQuotaResponse(res) {
+  res.writeHead(429, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({
+    error: {
+      message: QUOTA_MESSAGE,
+      type: "rate_limit_error",
+      code: "free_usage_limit_reached"
+    }
+  }));
 }
 
 // Forward chat completion
@@ -294,6 +271,16 @@ async function handleChatCompletion(req, res, body) {
     }
 
     const resData = await mRes.json();
+    const upstreamError = resData.info?.error || resData.error;
+    if (upstreamError) {
+      const detail = JSON.stringify(upstreamError);
+      if (/FreeUsageLimitError|Free usage limit reached|rate.limit|quota|429/i.test(detail)) {
+        notifyQuotaExhausted("Message response quota error");
+        sendQuotaResponse(res);
+        return;
+      }
+      throw new Error(`OpenCode upstream error: ${detail}`);
+    }
     const parts = resData.parts || [];
     const textPart = parts.find(p => p.type === "text") || { text: "" };
     const replyText = textPart.text || "";
