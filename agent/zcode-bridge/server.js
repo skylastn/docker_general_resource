@@ -20,6 +20,8 @@ const { DatabaseSync } = require("node:sqlite");
 const PORT = parseInt(process.env.PORT || "8080", 10);
 const HOST = "0.0.0.0";
 const DB_PATH = path.join(os.homedir(), ".zcode", "cli", "db", "db.sqlite");
+const WORKSPACE_DIR = "/tmp/zcode-bridge-workspace";
+try { fs.mkdirSync(WORKSPACE_DIR, { recursive: true }); } catch {}
 
 // 1. Resolve ZCode credentials
 function getDecryptedJwtToken() {
@@ -52,12 +54,14 @@ function getDecryptedJwtToken() {
 }
 
 let jwtToken = "";
-try {
-  jwtToken = getDecryptedJwtToken();
-  console.log("[Bridge] ZCode JWT token decrypted successfully.");
-} catch (err) {
-  console.error("[Bridge] Failed to decrypt ZCode credentials:", err.message);
-  process.exit(1);
+if (require.main === module) {
+  try {
+    jwtToken = getDecryptedJwtToken();
+    console.log("[Bridge] ZCode JWT token decrypted successfully.");
+  } catch (err) {
+    console.error("[Bridge] Failed to decrypt ZCode credentials:", err.message);
+    process.exit(1);
+  }
 }
 
 // 2. Manage ZCode App Server process
@@ -65,11 +69,6 @@ let appProcess = null;
 let reqSeq = 1;
 const pendingRequests = new Map();
 let isInitialized = false;
-let activeSessionId = "session_fcac2caec91657d4bbfc74928536601f";
-
-const queue = [];
-let processing = false;
-let isRestarting = false;
 
 function startAppServer() {
   console.log("[Bridge] Launching zcode app-server...");
@@ -88,7 +87,7 @@ function startAppServer() {
   appProcess.stdout.on("data", (chunk) => {
     stdoutBuffer += chunk.toString();
     const lines = stdoutBuffer.split("\n");
-    stdoutBuffer = lines.pop(); // Retain incomplete line
+    stdoutBuffer = lines.pop();
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
@@ -100,18 +99,15 @@ function startAppServer() {
     }
   });
 
-  appProcess.stderr.on("data", (chunk) => {
-    // console.error("[ZCode Server ERR]", chunk.toString().trim());
-  });
+  appProcess.stderr.on("data", () => {});
 
   appProcess.on("close", (code) => {
-    if (isRestarting) return;
     console.warn(`[Bridge] zcode app-server exited with code ${code}. Restarting in 2s...`);
     isInitialized = false;
     setTimeout(startAppServer, 2000);
   });
 
-  // Initial handshake sequence
+  // Handshake sequence
   setTimeout(() => {
     sendServerRequest("provider/updateAccountConfig", {
       revision: "account:manual-1",
@@ -129,7 +125,7 @@ function startAppServer() {
           current: true
         }
       }
-    });
+    }).catch(e => console.error("[Bridge] updateAccountConfig err:", e.message));
   }, 400);
 }
 
@@ -159,10 +155,7 @@ function sendServerRequest(method, params, timeoutMs = 15000) {
   });
 }
 
-let activeTurnHandler = null;
-
 function handleServerMessage(msg) {
-  // Protocol RPC incoming method calls from server
   if (msg.method === "session/requestRuntimePreferences") {
     if (appProcess && appProcess.stdin.writable) {
       appProcess.stdin.write(JSON.stringify({
@@ -191,7 +184,6 @@ function handleServerMessage(msg) {
     return;
   }
 
-  // Response to our RPC requests
   if (msg.id && pendingRequests.has(msg.id)) {
     const { resolve, reject, method } = pendingRequests.get(msg.id);
     pendingRequests.delete(msg.id);
@@ -201,63 +193,15 @@ function handleServerMessage(msg) {
       resolve(msg.result);
       if (method === "provider/updateAccountConfig") {
         sendServerRequest("provider/refreshRegistry", { reason: "account-updated" })
-          .then(() => sendServerRequest("session/resume", { sessionId: activeSessionId }))
           .then(() => {
-            console.log("[Bridge] App server ready and session active!");
+            console.log("[Bridge] App server ready!");
             isInitialized = true;
-            processQueue();
           })
-          .catch((e) => console.error("[Bridge] Init error:", e));
+          .catch((e) => console.error("[Bridge] Init error:", e.message));
       }
     }
     return;
   }
-
-  // State updates during turn
-  if (msg.method === "state.updated" && activeTurnHandler) {
-    const patch = msg.params?.patch;
-    if (patch && patch.status === "idle" && activeTurnHandler) {
-      activeTurnHandler.onComplete();
-    }
-  }
-
-  // Events streaming
-  if (msg.method === "session/events" && activeTurnHandler) {
-    const events = msg.params?.events || [];
-    for (const ev of events) {
-      if (ev.delta) {
-        activeTurnHandler.onDelta(ev.delta);
-      } else if (ev.part && ev.part.text) {
-        activeTurnHandler.onDelta(ev.part.text);
-      }
-    }
-  }
-}
-
-let restarting = null;
-function restartAppServer() {
-  if (restarting) return restarting;
-  restarting = new Promise((resolve) => {
-    console.log("[Bridge] Re-starting zcode app-server daemon...");
-    isInitialized = false;
-    isRestarting = true;
-    if (appProcess) {
-      try { appProcess.kill("SIGKILL"); } catch {}
-    }
-    setTimeout(() => {
-      isRestarting = false;
-      startAppServer();
-    }, 200);
-    const start = Date.now();
-    const interval = setInterval(() => {
-      if (isInitialized || Date.now() - start > 10000) {
-        clearInterval(interval);
-        restarting = null;
-        resolve();
-      }
-    }, 200);
-  });
-  return restarting;
 }
 
 function resolveModelId(targetModel) {
@@ -267,90 +211,101 @@ function resolveModelId(targetModel) {
   return "GLM-5.3-Flash";
 }
 
-let currentModelInSession = "GLM-5.3-Flash";
-async function switchModelIfNeeded(targetModel) {
-  const modelId = resolveModelId(targetModel);
-  if (modelId === currentModelInSession) return;
-  try {
-    await sendServerRequest("session/setModel", {
-      sessionId: activeSessionId,
-      model: {
-        providerId: "account:zai-start-plan",
-        modelId: modelId,
-        options: { reasoningLevel: "max" }
-      }
-    }, 5000);
-    currentModelInSession = modelId;
-    console.log("[Bridge] Switched session model to:", modelId);
-  } catch (e) {
-    console.warn("[Bridge] Model switch failed:", e.message);
+async function handleChatCompletion(req, res, messages, model, stream) {
+  if (!isInitialized) {
+    const start = Date.now();
+    while (!isInitialized && Date.now() - start < 8000) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+    if (!isInitialized) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "ZCode bridge not ready yet", type: "server_error" } }));
+      return;
+    }
   }
-}
 
-async function sendPromptWithRetry(prompt, targetModel) {
-  await switchModelIfNeeded(targetModel);
-  try {
-    return await sendServerRequest("session/send", {
-      sessionId: activeSessionId,
-      content: prompt
-    }, 15000);
-  } catch (err) {
-    console.warn("[Bridge] session/send attempt failed:", err.message);
-    console.log("[Bridge] Restarting app-server to recover session...");
-    await restartAppServer();
-    await switchModelIfNeeded(targetModel);
-    return await sendServerRequest("session/send", {
-      sessionId: activeSessionId,
-      content: prompt
-    }, 15000);
+  let systemPrompt = "";
+  const conversationLines = [];
+
+  for (const m of messages) {
+    if (m.role === "system") {
+      const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+      systemPrompt += (systemPrompt ? "\n" : "") + content;
+    } else {
+      const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+      conversationLines.push(`${m.role.toUpperCase()}: ${content}`);
+    }
   }
-}
 
-// 3. Queue worker for chat completions
-function queueCompletion(messages, model, stream, res) {
-  queue.push({ messages, model, stream, res });
-  processQueue();
-}
-
-async function processQueue() {
-  if (processing || queue.length === 0 || !isInitialized) return;
-  processing = true;
-
-  const item = queue.shift();
-  const { messages, model, stream, res } = item;
-
-  // Extract last user message or construct prompt
-  const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
-  const prompt = lastUserMsg ? (typeof lastUserMsg.content === "string" ? lastUserMsg.content : JSON.stringify(lastUserMsg.content)) : "Halo";
+  let prompt = "";
+  if (systemPrompt) {
+    prompt += `[SYSTEM INSTRUCTIONS]\n${systemPrompt}\n\n`;
+  }
+  if (conversationLines.length > 0) {
+    prompt += conversationLines.join("\n\n");
+  } else {
+    prompt += "Halo";
+  }
 
   const completionId = `chatcmpl-${crypto.randomBytes(12).toString("hex")}`;
   const created = Math.floor(Date.now() / 1000);
-
-  if (stream) {
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive"
-    });
-  }
-
+  const targetModelId = resolveModelId(model);
+  const sessionId = `sess_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
   const startTimeMs = Date.now();
   let fullText = "";
+  let headersSent = false;
 
   try {
-    await sendPromptWithRetry(prompt, model);
+    // 1. Create isolated session with tools disabled
+    await sendServerRequest("session/create", {
+      sessionId,
+      workspace: {
+        workspacePath: WORKSPACE_DIR,
+        workspaceKey: WORKSPACE_DIR
+      },
+      model: {
+        providerId: "account:zai-start-plan",
+        modelId: targetModelId,
+        options: { reasoningLevel: "max" }
+      },
+      thoughtLevel: "max",
+      toolAllowlist: []
+    }, 10000);
 
-    // Poll SQLite for assistant output until step-finish
-    const timeoutAt = Date.now() + 60000;
+    if (res.destroyed) return;
+
+    // 2. Send prompt
+    await sendServerRequest("session/send", {
+      sessionId,
+      content: prompt
+    }, 15000);
+
+    // 3. Poll SQLite for assistant output until step-finish
+    const timeoutAt = Date.now() + 45000;
     while (Date.now() < timeoutAt) {
-      await new Promise(r => setTimeout(r, 250));
+      if (res.destroyed) break;
+      await new Promise(r => setTimeout(r, 200));
       try {
         const db = new DatabaseSync(DB_PATH, { readOnly: true });
         const msgRow = db.prepare(
-          "SELECT id FROM message WHERE session_id = ? AND time_created >= ? AND data LIKE '%\"role\":\"assistant\"%' ORDER BY time_created DESC LIMIT 1;"
-        ).get(activeSessionId, startTimeMs - 500);
+          "SELECT id, data FROM message WHERE session_id = ? AND time_created >= ? AND data LIKE '%\"role\":\"assistant\"%' ORDER BY time_created DESC LIMIT 1;"
+        ).get(sessionId, startTimeMs - 500);
 
         if (msgRow) {
+          try {
+            const rowData = JSON.parse(msgRow.data || "{}");
+            if (rowData.error) {
+              const errObj = rowData.error.data || rowData.error;
+              db.close();
+              throw new Error(errObj.message || "Upstream model error");
+            }
+          } catch (e) {
+            if (e.message.includes("Upstream model error") || e.message.includes("model_request")) {
+              db.close();
+              throw e;
+            }
+          }
+
           const parts = db.prepare(
             "SELECT sequence, data FROM part WHERE message_id = ? ORDER BY sequence ASC;"
           ).all(msgRow.id);
@@ -364,6 +319,14 @@ async function processQueue() {
                   const delta = d.text.slice(fullText.length);
                   fullText = d.text;
                   if (stream) {
+                    if (!headersSent && !res.headersSent) {
+                      res.writeHead(200, {
+                        "Content-Type": "text/event-stream; charset=utf-8",
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive"
+                      });
+                      headersSent = true;
+                    }
                     const chunk = {
                       id: completionId,
                       object: "chat.completion.chunk",
@@ -385,22 +348,34 @@ async function processQueue() {
         } else {
           db.close();
         }
-      } catch (err) {}
+      } catch (err) {
+        if (err.message.includes("Upstream model error") || err.message.includes("model_request")) {
+          throw err;
+        }
+      }
+    }
+
+    if (res.destroyed) return;
+
+    if (!fullText) {
+      throw new Error("No response generated from upstream ZCode model");
     }
 
     if (stream) {
+      if (!headersSent && !res.headersSent) {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive"
+        });
+        headersSent = true;
+      }
       const finalChunk = {
         id: completionId,
         object: "chat.completion.chunk",
         created,
         model,
-        choices: [
-          {
-            index: 0,
-            delta: {},
-            finish_reason: "stop"
-          }
-        ]
+        choices: [{ index: 0, delta: {}, finish_reason: "stop" }]
       };
       res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
       res.write("data: [DONE]\n\n");
@@ -412,41 +387,26 @@ async function processQueue() {
         object: "chat.completion",
         created,
         model,
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: fullText
-            },
-            finish_reason: "stop"
-          }
-        ],
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: fullText.length,
-          total_tokens: fullText.length
-        }
+        choices: [{ index: 0, message: { role: "assistant", content: fullText }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 0, completion_tokens: fullText.length, total_tokens: fullText.length }
       }));
     }
   } catch (err) {
-    console.error("[Bridge] Error during session/send:", err);
-    if (!res.headersSent) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: { message: err.message || "Internal error" } }));
+    console.error("[Bridge] Error during completion:", err.message || err);
+    if (!headersSent && !res.headersSent) {
+      res.writeHead(502, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: { message: err.message || "Internal error", type: "server_error" } }));
     } else {
       res.end();
     }
   } finally {
-    activeTurnHandler = null;
-    processing = false;
-    processQueue();
+    sendServerRequest("session/stop", { sessionId }).catch(() => {});
+    sendServerRequest("session/close", { sessionId }).catch(() => {});
   }
 }
 
-// 4. HTTP Server
+// 3. HTTP Server
 const server = http.createServer((req, res) => {
-  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "*");
@@ -463,8 +423,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       status: "ok",
-      ready: isInitialized,
-      queued: queue.length
+      ready: isInitialized
     }));
     return;
   }
@@ -476,7 +435,9 @@ const server = http.createServer((req, res) => {
       data: [
         { id: "glm-5.3-flash", object: "model", owned_by: "zcode" },
         { id: "glm-5.3", object: "model", owned_by: "zcode" },
-        { id: "GLM-5.3-Flash", object: "model", owned_by: "zcode" }
+        { id: "GLM-5.3-Flash", object: "model", owned_by: "zcode" },
+        { id: "GLM-5.2", object: "model", owned_by: "zcode" },
+        { id: "GLM-5-Turbo", object: "model", owned_by: "zcode" }
       ]
     }));
     return;
@@ -491,7 +452,7 @@ const server = http.createServer((req, res) => {
         const messages = json.messages || [];
         const model = json.model || "glm-5.3-flash";
         const stream = Boolean(json.stream);
-        queueCompletion(messages, model, stream, res);
+        handleChatCompletion(req, res, messages, model, stream);
       } catch (err) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: { message: "Invalid JSON body" } }));
@@ -504,8 +465,14 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ error: { message: `Not Found: ${url.pathname}` } }));
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`[Bridge] ZCode Bridge listening on http://${HOST}:${PORT}`);
-  console.log(`[Bridge] Accessible from Docker via http://host.docker.internal:${PORT}/v1/chat/completions`);
-  startAppServer();
-});
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    console.log(`[Bridge] ZCode Bridge listening on http://${HOST}:${PORT}`);
+    console.log(`[Bridge] Accessible from Docker via http://host.docker.internal:${PORT}/v1/chat/completions`);
+    startAppServer();
+  });
+}
+
+module.exports = {
+  resolveModelId
+};
