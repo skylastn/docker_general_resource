@@ -11,6 +11,8 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       PORT: 20128
       INITIAL_PASSWORD: ${INITIAL_PASSWORD}
+      FETCH_CONNECT_TIMEOUT_MS: 300000
+      STREAM_FIRST_CHUNK_TIMEOUT_MS: 300000
     restart: unless-stopped
     networks:
       - general-net

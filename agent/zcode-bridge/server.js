@@ -237,12 +237,24 @@ async function handleChatCompletion(req, res, messages, model, stream) {
     }
   }
 
+  let conversationText = "";
+  if (conversationLines.length > 50) {
+    const trimmed = [
+      ...conversationLines.slice(0, 2),
+      `\n[... ${conversationLines.length - 42} older messages omitted for speed ...]\n`,
+      ...conversationLines.slice(-40)
+    ];
+    conversationText = trimmed.join("\n\n");
+  } else {
+    conversationText = conversationLines.join("\n\n");
+  }
+
   let prompt = "";
   if (systemPrompt) {
     prompt += `[SYSTEM INSTRUCTIONS]\n${systemPrompt}\n\n`;
   }
-  if (conversationLines.length > 0) {
-    prompt += conversationLines.join("\n\n");
+  if (conversationText) {
+    prompt += conversationText;
   } else {
     prompt += "Halo";
   }
@@ -278,32 +290,35 @@ async function handleChatCompletion(req, res, messages, model, stream) {
     await sendServerRequest("session/send", {
       sessionId,
       content: prompt
-    }, 15000);
+    }, 20000);
+
+    if (res.destroyed) return;
 
     // 3. Poll SQLite for assistant output until step-finish
-    const timeoutAt = Date.now() + 45000;
+    let lastKeepAlive = Date.now();
+    const timeoutAt = Date.now() + 60000;
     while (Date.now() < timeoutAt) {
       if (res.destroyed) break;
       await new Promise(r => setTimeout(r, 200));
+
+      if (stream && headersSent && Date.now() - lastKeepAlive > 8000) {
+        lastKeepAlive = Date.now();
+        res.write(": keep-alive\n\n");
+      }
+
+      const db = new DatabaseSync(DB_PATH, { readOnly: true });
       try {
-        const db = new DatabaseSync(DB_PATH, { readOnly: true });
         const msgRow = db.prepare(
           "SELECT id, data FROM message WHERE session_id = ? AND time_created >= ? AND data LIKE '%\"role\":\"assistant\"%' ORDER BY time_created DESC LIMIT 1;"
         ).get(sessionId, startTimeMs - 500);
 
         if (msgRow) {
-          try {
-            const rowData = JSON.parse(msgRow.data || "{}");
-            if (rowData.error) {
-              const errObj = rowData.error.data || rowData.error;
-              db.close();
-              throw new Error(errObj.message || "Upstream model error");
-            }
-          } catch (e) {
-            if (e.message.includes("Upstream model error") || e.message.includes("model_request")) {
-              db.close();
-              throw e;
-            }
+          const rowData = JSON.parse(msgRow.data || "{}");
+          if (rowData.error) {
+            const errObj = rowData.error.data || rowData.error;
+            const err = new Error(errObj.message || "Upstream model error");
+            err.isQuota = /quota|limit|1005/i.test(JSON.stringify(rowData.error));
+            throw err;
           }
 
           const parts = db.prepare(
@@ -343,15 +358,10 @@ async function handleChatCompletion(req, res, messages, model, stream) {
               }
             } catch {}
           }
-          db.close();
           if (isFinished) break;
-        } else {
-          db.close();
         }
-      } catch (err) {
-        if (err.message.includes("Upstream model error") || err.message.includes("model_request")) {
-          throw err;
-        }
+      } finally {
+        try { db.close(); } catch {}
       }
     }
 
@@ -394,8 +404,15 @@ async function handleChatCompletion(req, res, messages, model, stream) {
   } catch (err) {
     console.error("[Bridge] Error during completion:", err.message || err);
     if (!headersSent && !res.headersSent) {
-      res.writeHead(502, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: { message: err.message || "Internal error", type: "server_error" } }));
+      const status = err.isQuota ? 429 : 502;
+      res.writeHead(status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: {
+          message: err.message || "Internal error",
+          type: err.isQuota ? "insufficient_quota" : "server_error",
+          code: err.isQuota ? "insufficient_quota" : "upstream_error"
+        }
+      }));
     } else {
       res.end();
     }

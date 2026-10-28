@@ -212,7 +212,17 @@ async function handleChatCompletion(req, res, body) {
     }
   }
 
-  const promptText = conversationLines.length > 0 ? conversationLines.join("\n\n") : "Halo";
+  let promptText = "";
+  if (conversationLines.length > 50) {
+    const trimmed = [
+      ...conversationLines.slice(0, 2),
+      `\n[... ${conversationLines.length - 42} older messages omitted for speed ...]\n`,
+      ...conversationLines.slice(-40)
+    ];
+    promptText = trimmed.join("\n\n");
+  } else {
+    promptText = conversationLines.length > 0 ? conversationLines.join("\n\n") : "Halo";
+  }
 
   let sessionId = null;
   const abortController = new AbortController();
