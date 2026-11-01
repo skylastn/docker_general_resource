@@ -5,3 +5,6 @@ backups
 # credentials (never push)
 ssh/
 streaming/keys/
+agent/9r-bulk-add/
+agent/muse2api/
+

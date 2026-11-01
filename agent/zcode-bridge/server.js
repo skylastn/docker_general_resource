@@ -114,7 +114,7 @@ function startAppServer() {
       basedOnZCodeBuiltinRevision: "zcode-builtin:33:8f54ff88821cb0f70c213894cd6e3434966f570e74b53e061aa19778f79fab1c",
       providers: {
         "account:zai-start-plan": {
-          builtinModelIds: ["GLM-5.3-Flash", "GLM-5.2", "GLM-5-Turbo"],
+          builtinModelIds: ["GLM-5.3", "GLM-5.3-Flash", "GLM-5.2", "GLM-5-Turbo"],
           access: { type: "zhipu-account", entitled: true }
         }
       },
@@ -208,7 +208,19 @@ function resolveModelId(targetModel) {
   const m = (targetModel || "").toLowerCase();
   if (m.includes("5.2")) return "GLM-5.2";
   if (m.includes("turbo")) return "GLM-5-Turbo";
+  if (m.includes("flash")) return "GLM-5.3-Flash";
+  if (m.includes("5.3")) return "GLM-5.3";
   return "GLM-5.3-Flash";
+}
+
+let lockChain = Promise.resolve();
+
+function acquireLock() {
+  let release;
+  const p = new Promise(resolve => { release = resolve; });
+  const current = lockChain;
+  lockChain = lockChain.then(() => p);
+  return current.then(() => release);
 }
 
 async function handleChatCompletion(req, res, messages, model, stream) {
@@ -224,6 +236,15 @@ async function handleChatCompletion(req, res, messages, model, stream) {
     }
   }
 
+  const release = await acquireLock();
+  try {
+    await doCompletion(req, res, messages, model, stream);
+  } finally {
+    setTimeout(release, 1500);
+  }
+}
+
+async function doCompletion(req, res, messages, model, stream) {
   let systemPrompt = "";
   const conversationLines = [];
 
@@ -262,107 +283,128 @@ async function handleChatCompletion(req, res, messages, model, stream) {
   const completionId = `chatcmpl-${crypto.randomBytes(12).toString("hex")}`;
   const created = Math.floor(Date.now() / 1000);
   const targetModelId = resolveModelId(model);
-  const sessionId = `sess_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
-  const startTimeMs = Date.now();
   let fullText = "";
   let headersSent = false;
 
   try {
-    // 1. Create isolated session with tools disabled
-    await sendServerRequest("session/create", {
-      sessionId,
-      workspace: {
-        workspacePath: WORKSPACE_DIR,
-        workspaceKey: WORKSPACE_DIR
-      },
-      model: {
-        providerId: "account:zai-start-plan",
-        modelId: targetModelId,
-        options: { reasoningLevel: "max" }
-      },
-      thoughtLevel: "max",
-      toolAllowlist: []
-    }, 10000);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const sessionId = `sess_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+      const startTimeMs = Date.now();
+      let retryNeeded = false;
 
-    if (res.destroyed) return;
-
-    // 2. Send prompt
-    await sendServerRequest("session/send", {
-      sessionId,
-      content: prompt
-    }, 20000);
-
-    if (res.destroyed) return;
-
-    // 3. Poll SQLite for assistant output until step-finish
-    let lastKeepAlive = Date.now();
-    const timeoutAt = Date.now() + 60000;
-    while (Date.now() < timeoutAt) {
-      if (res.destroyed) break;
-      await new Promise(r => setTimeout(r, 200));
-
-      if (stream && headersSent && Date.now() - lastKeepAlive > 8000) {
-        lastKeepAlive = Date.now();
-        res.write(": keep-alive\n\n");
-      }
-
-      const db = new DatabaseSync(DB_PATH, { readOnly: true });
       try {
-        const msgRow = db.prepare(
-          "SELECT id, data FROM message WHERE session_id = ? AND time_created >= ? AND data LIKE '%\"role\":\"assistant\"%' ORDER BY time_created DESC LIMIT 1;"
-        ).get(sessionId, startTimeMs - 500);
+        // 1. Create fresh isolated session
+        await sendServerRequest("session/create", {
+          sessionId,
+          workspace: {
+            workspacePath: WORKSPACE_DIR,
+            workspaceKey: WORKSPACE_DIR
+          },
+          model: {
+            providerId: "account:zai-start-plan",
+            modelId: targetModelId,
+            options: targetModelId.includes("Turbo") ? { reasoningLevel: "enabled" } : { reasoningLevel: "max" }
+          },
+          thoughtLevel: "max",
+          toolAllowlist: []
+        }, 10000);
 
-        if (msgRow) {
-          const rowData = JSON.parse(msgRow.data || "{}");
-          if (rowData.error) {
-            const errObj = rowData.error.data || rowData.error;
-            const err = new Error(errObj.message || "Upstream model error");
-            err.isQuota = /quota|limit|1005/i.test(JSON.stringify(rowData.error));
-            throw err;
+        if (res.destroyed) return;
+
+        // 2. Send prompt
+        await sendServerRequest("session/send", {
+          sessionId,
+          content: prompt
+        }, 20000);
+
+        if (res.destroyed) return;
+
+        // 3. Poll SQLite for assistant output until step-finish
+        let lastKeepAlive = Date.now();
+        const timeoutAt = Date.now() + 60000;
+        while (Date.now() < timeoutAt) {
+          if (res.destroyed) break;
+          await new Promise(r => setTimeout(r, 200));
+
+          if (stream && headersSent && Date.now() - lastKeepAlive > 8000) {
+            lastKeepAlive = Date.now();
+            res.write(": keep-alive\n\n");
           }
 
-          const parts = db.prepare(
-            "SELECT sequence, data FROM part WHERE message_id = ? ORDER BY sequence ASC;"
-          ).all(msgRow.id);
+          const db = new DatabaseSync(DB_PATH, { readOnly: true });
+          try {
+            const msgRow = db.prepare(
+              "SELECT id, data FROM message WHERE session_id = ? AND time_created >= ? AND data LIKE '%\"role\":\"assistant\"%' ORDER BY time_created DESC LIMIT 1;"
+            ).get(sessionId, startTimeMs - 500);
 
-          let isFinished = false;
-          for (const p of parts) {
-            try {
-              const d = JSON.parse(p.data);
-              if (d.type === "text" && d.text) {
-                if (d.text.length > fullText.length) {
-                  const delta = d.text.slice(fullText.length);
-                  fullText = d.text;
-                  if (stream) {
-                    if (!headersSent && !res.headersSent) {
-                      res.writeHead(200, {
-                        "Content-Type": "text/event-stream; charset=utf-8",
-                        "Cache-Control": "no-cache",
-                        "Connection": "keep-alive"
-                      });
-                      headersSent = true;
-                    }
-                    const chunk = {
-                      id: completionId,
-                      object: "chat.completion.chunk",
-                      created,
-                      model,
-                      choices: [{ index: 0, delta: { content: delta }, finish_reason: null }]
-                    };
-                    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-                  }
+            if (msgRow) {
+              const rowData = JSON.parse(msgRow.data || "{}");
+              if (rowData.error) {
+                const errStr = JSON.stringify(rowData.error);
+                if (/3009|concurrency/i.test(errStr) && attempt < 3) {
+                  console.warn(`[Bridge] Concurrency limit hit on attempt ${attempt}, waiting 3s to retry...`);
+                  retryNeeded = true;
+                  break;
                 }
+                const errObj = rowData.error.data || rowData.error;
+                const err = new Error(errObj.message || "Upstream model error");
+                err.isQuota = /1005|exceed quota/i.test(errStr);
+                throw err;
               }
-              if (d.type === "step-finish") {
-                isFinished = true;
+
+              const parts = db.prepare(
+                "SELECT sequence, data FROM part WHERE message_id = ? ORDER BY sequence ASC;"
+              ).all(msgRow.id);
+
+              let isFinished = false;
+              for (const p of parts) {
+                try {
+                  const d = JSON.parse(p.data);
+                  if (d.type === "text" && d.text) {
+                    if (d.text.length > fullText.length) {
+                      const delta = d.text.slice(fullText.length);
+                      fullText = d.text;
+                      if (stream) {
+                        if (!headersSent && !res.headersSent) {
+                          res.writeHead(200, {
+                            "Content-Type": "text/event-stream; charset=utf-8",
+                            "Cache-Control": "no-cache",
+                            "Connection": "keep-alive"
+                          });
+                          headersSent = true;
+                        }
+                        const chunk = {
+                          id: completionId,
+                          object: "chat.completion.chunk",
+                          created,
+                          model,
+                          choices: [{ index: 0, delta: { content: delta }, finish_reason: null }]
+                        };
+                        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                      }
+                    }
+                  }
+                  if (d.type === "step-finish") {
+                    isFinished = true;
+                  }
+                } catch {}
               }
-            } catch {}
+              if (isFinished) break;
+            }
+          } finally {
+            try { db.close(); } catch {}
           }
-          if (isFinished) break;
         }
       } finally {
-        try { db.close(); } catch {}
+        sendServerRequest("session/stop", { sessionId }).catch(() => {});
+        sendServerRequest("session/close", { sessionId }).catch(() => {});
       }
+
+      if (retryNeeded) {
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      break;
     }
 
     if (res.destroyed) return;
@@ -404,7 +446,8 @@ async function handleChatCompletion(req, res, messages, model, stream) {
   } catch (err) {
     console.error("[Bridge] Error during completion:", err.message || err);
     if (!headersSent && !res.headersSent) {
-      const status = err.isQuota ? 429 : 502;
+      // Return 502 on upstream quota/concurrency errors so 9router can fallback in combos without 30s modelLock
+      const status = 502;
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         error: {
@@ -416,9 +459,6 @@ async function handleChatCompletion(req, res, messages, model, stream) {
     } else {
       res.end();
     }
-  } finally {
-    sendServerRequest("session/stop", { sessionId }).catch(() => {});
-    sendServerRequest("session/close", { sessionId }).catch(() => {});
   }
 }
 

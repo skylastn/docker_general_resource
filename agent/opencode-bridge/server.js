@@ -113,6 +113,7 @@ function startOpenCodeServer() {
 
   opencodeProcess.stdout.on("data", (d) => {
     const text = d.toString();
+    console.log(`[OpenCode stdout] ${text.trim()}`);
     if (text.includes("opencode server listening")) {
       console.log(`[OpenCode Bridge] opencode serve is ready on 127.0.0.1:${OPENCODE_PORT}`);
       isReady = true;
@@ -122,6 +123,7 @@ function startOpenCodeServer() {
 
   opencodeProcess.stderr.on("data", (d) => {
     const text = d.toString();
+    console.error(`[OpenCode stderr] ${text.trim()}`);
     if (
       text.includes("Free usage limit reached") ||
       text.includes("FreeUsageLimitError")
@@ -156,11 +158,12 @@ async function waitForReady(maxWaitMs = 10000) {
 
 // Helper to send quota exhausted response to client
 function sendQuotaResponse(res) {
-  res.writeHead(429, { "Content-Type": "application/json" });
+  // Return 502 instead of 429 so 9router immediately falls back in combos without setting modelLock
+  res.writeHead(502, { "Content-Type": "application/json" });
   res.end(JSON.stringify({
     error: {
       message: QUOTA_MESSAGE,
-      type: "rate_limit_error",
+      type: "insufficient_quota",
       code: "free_usage_limit_reached"
     }
   }));
@@ -362,13 +365,16 @@ async function handleChatCompletion(req, res, body) {
     console.error("[OpenCode Bridge] Request error:", err.message);
     if (!res.headersSent) {
       const isTimeout = err.name === "TimeoutError" || String(err.message).includes("timed out");
-      const status = isTimeout ? 504 : 500;
+      // Return 502 instead of 500 on upstream/internal failures to avoid triggering 30s modelLock in 9router
+      const status = isTimeout ? 504 : 502;
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         error: {
           message: isTimeout
             ? "OpenCode upstream timed out. Server sibuk atau sedang throttling."
-            : (err.message || "Internal error")
+            : (err.message || "Internal error"),
+          type: "upstream_error",
+          code: "upstream_error"
         }
       }));
     } else {
