@@ -257,13 +257,29 @@ async function handleChatCompletion(req, res, body) {
     // Track active request
     activeRequests.set(sessionId, { abortController, res, stream, completionId, created, modelId });
 
-    // 2. Send message
+    // 2. Send message with prompt streaming
     const msgPayload = {
       model: { providerID: "opencode", modelID: modelId },
       parts: [{ type: "text", text: promptText }]
     };
     if (systemPrompt) {
       msgPayload.system = systemPrompt;
+    }
+
+    if (stream) {
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive"
+      });
+
+      res.write(`data: ${JSON.stringify({
+        id: completionId,
+        object: "chat.completion.chunk",
+        created,
+        model: modelId,
+        choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }]
+      })}\n\n`);
     }
 
     const mRes = await fetch(`${OPENCODE_BASE}/session/${sessionId}/message`, {
@@ -302,12 +318,6 @@ async function handleChatCompletion(req, res, body) {
     const tokenInfo = finishPart?.tokens || { input: 0, output: replyText.length, total: replyText.length };
 
     if (stream) {
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive"
-      });
-
       const chunk = {
         id: completionId,
         object: "chat.completion.chunk",

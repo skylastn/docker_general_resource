@@ -15,7 +15,7 @@ const crypto = require("node:crypto");
 const os = require("node:os");
 const fs = require("node:fs");
 const path = require("node:path");
-const { execSync } = require("node:child_process");
+const { execSync, exec } = require("node:child_process");
 
 const PORT = parseInt(process.env.PORT || "8087", 10);
 const HOST = "0.0.0.0";
@@ -43,6 +43,12 @@ const SUPPORTED_MODELS = [
   "glm-5.3-flash",
   "glm-5.3",
   "glm-5.2",
+  "hy4free",
+  "hy4std",
+  "hy4",
+  "hy3",
+  "default-model",
+  "max-model",
   "gpt-6-astra",
   "gpt-6.1-sol",
   "gpt-6-sol",
@@ -61,17 +67,22 @@ const SUPPORTED_MODELS = [
   "fast-model",
   "balanced-model",
   "primary-model",
-  "hy4-preview",
-  "hy3"
+  "hy4-preview"
 ];
 
 function resolveModelId(modelInput) {
   if (!modelInput) return "deepseek-v4.1-flash";
   let m = modelInput.toLowerCase().replace(/^(workbuddy\/|wb\/)+/g, "");
   if (SUPPORTED_MODELS.includes(m)) return m;
+  if (m.includes("hy4") && m.includes("std")) return "hy4std";
+  if (m.includes("hy4")) return "hy4free";
+  if (m.includes("hy3")) return "hy3";
+  if (m.includes("max")) return "max-model";
+  if (m.includes("default") || m === "auto") return "default-model";
   if (m.includes("deepseek")) return "deepseek-v4.1-flash";
   if (m.includes("glm") && m.includes("flash")) return "glm-5.3-flash";
   if (m.includes("glm")) return "glm-5.3";
+  if (m.includes("minimax")) return "minimax-m3.1-flash";
   if (m.includes("fast")) return "fast-model";
   if (m.includes("balanced")) return "balanced-model";
   if (m.includes("primary")) return "primary-model";
@@ -90,7 +101,18 @@ function findSidecarSocket() {
           if (sub.isDirectory()) {
             const pidFile = path.join(tmp, ent.name, sub.name, "sidecar.pid");
             if (fs.existsSync(pidFile)) {
-              const data = JSON.parse(fs.readFileSync(pidFile, "utf8"));
+              let data;
+              try {
+                data = JSON.parse(fs.readFileSync(pidFile, "utf8"));
+              } catch (e) {
+                continue;
+              }
+              try {
+                process.kill(data.pid, 0);
+              } catch (err) {
+                try { fs.unlinkSync(pidFile); } catch (e) {}
+                continue;
+              }
               const sockPath = path.join(tmp, ent.name, sub.name, `sidecar-${data.controlPipeUuid}.sock`);
               if (fs.existsSync(sockPath)) {
                 return { socketPath: sockPath, pid: data.pid };
@@ -102,6 +124,39 @@ function findSidecarSocket() {
     }
   } catch (e) {}
   return null;
+}
+
+async function ensureLiveSidecarSocket() {
+  let sidecarInfo = findSidecarSocket();
+  if (sidecarInfo) return sidecarInfo;
+
+  console.log("[WorkerManager] Sidecar socket not active, auto-waking WorkBuddy AI daemon...");
+  try {
+    execSync('open -a "/Applications/WorkBuddy AI.app"');
+  } catch (e) {}
+
+  const hasCliclick = fs.existsSync("/opt/homebrew/bin/cliclick");
+  const wakeCmd = hasCliclick
+    ? `/usr/bin/osascript -e 'tell application "WorkBuddy AI" to activate' && sleep 0.4 && /opt/homebrew/bin/cliclick c:735,750 t:"ping" kp:return`
+    : `/usr/bin/osascript -e 'tell application "WorkBuddy AI" to activate' -e 'delay 0.5' -e 'tell application "System Events" to keystroke "ping"' -e 'tell application "System Events" to key code 36'`;
+
+  try {
+    exec(wakeCmd, () => {});
+  } catch (e) {}
+
+  const start = Date.now();
+  while (Date.now() - start < 12000) {
+    await new Promise((r) => setTimeout(r, 400));
+    sidecarInfo = findSidecarSocket();
+    if (sidecarInfo) {
+      console.log(`[WorkerManager] WorkBuddy sidecar is ready (pid=${sidecarInfo.pid})`);
+      return sidecarInfo;
+    }
+  }
+
+  throw new Error(
+    "WorkBuddy AI sidecar socket not found after wake attempt. Please ensure WorkBuddy AI application is open and logged in."
+  );
 }
 
 // 2. Call Sidecar JSON-RPC
@@ -179,11 +234,9 @@ class WorkerManager {
   }
 
   async spawnWorker() {
-    const sidecarInfo = findSidecarSocket();
+    let sidecarInfo = findSidecarSocket();
     if (!sidecarInfo) {
-      throw new Error(
-        "WorkBuddy AI sidecar socket not found. Please ensure WorkBuddy AI application is running on this laptop."
-      );
+      sidecarInfo = await ensureLiveSidecarSocket();
     }
 
     const sessionId = "wb-bridge-" + crypto.randomUUID().slice(0, 8);
@@ -223,10 +276,15 @@ class WorkerManager {
     const port = parseInt(url.port, 10);
     console.log(`[WorkerManager] Worker spawned (PID=${res.pid}, port=${port})`);
 
+    const conn = await httpPostJson(port, "/api/v1/acp/connect", {}, { "X-CodeBuddy-Request": "1" });
+    const connectionId = conn.connectionId;
+    await rpcPost(port, connectionId, "initialize", { protocolVersion: 1 }, 1);
+
     this.worker = {
       port,
       pid: res.pid,
-      sessionId
+      sessionId,
+      connectionId
     };
     return this.worker;
   }
@@ -391,20 +449,17 @@ async function handleChatCompletion(req, res, body) {
   let promptText = systemPrompt ? `${systemPrompt}\n\n${promptBody}` : promptBody;
   promptText = promptText.trim() || "Halo";
 
-  // Per-request isolated ACP connection
-  let connectionId;
+  // Reuse worker connectionId & create session directly
+  const connectionId = worker.connectionId;
   let sessionId;
   try {
-    const conn = await httpPostJson(worker.port, "/api/v1/acp/connect", {}, { "X-CodeBuddy-Request": "1" });
-    connectionId = conn.connectionId;
-    await rpcPost(worker.port, connectionId, "initialize", { protocolVersion: 1 }, 1);
     const sess = await rpcPost(worker.port, connectionId, "session/new", { cwd: "/tmp", mcpServers: [] }, 2);
     sessionId = sess.sessionId;
     await rpcPost(worker.port, connectionId, "session/set_mode", { sessionId, modeId: "bypassPermissions" }, 3);
     await rpcPost(worker.port, connectionId, "session/set_model", { sessionId, modelId }, 4);
   } catch (err) {
     console.error(`[Bridge] [${completionId}] Failed setting up ACP session:`, err.message);
-    workerManager.worker = null; // Respawn next time if worker broke
+    workerManager.worker = null;
     res.writeHead(502, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: { message: `ACP session error: ${err.message}` } }));
     return;
