@@ -226,7 +226,7 @@ class WorkerManager {
   async pingWorker(worker) {
     if (!worker || !worker.pid || !worker.port) return false;
     try {
-      await httpPostJson(worker.port, "/health", {});
+      await httpPostJson(worker.port, "/health", {}, { "X-CodeBuddy-Request": "1", "acp-connection-id": worker.connectionId });
       return true;
     } catch (e) {
       return false;
