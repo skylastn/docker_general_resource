@@ -226,7 +226,7 @@ class WorkerManager {
   async pingWorker(worker) {
     if (!worker || !worker.pid || !worker.port) return false;
     try {
-      process.kill(worker.pid, 0);
+      await httpPostJson(worker.port, "/health", {});
       return true;
     } catch (e) {
       return false;
