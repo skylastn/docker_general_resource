@@ -1,0 +1,25 @@
+services:
+  router:
+    image: luqmenul/9router-go:latest
+    container_name: 9router
+    ports:
+      - "20128:20128"
+    volumes:
+      - ~/.9router:/data
+    entrypoint: ["sh", "-c", "exec 9router-go < /dev/null"]
+    environment:
+      - PORT=20128
+      - DATA_DIR=/data
+      - INITIAL_PASSWORD=${INITIAL_PASSWORD}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - RTK_ENABLED=true
+      - TRUST_PROXY=true
+      - QODER_MODEL_QUEUE_MAX_WAIT_MS=${QODER_MODEL_QUEUE_MAX_WAIT_MS:-1}
+    restart: unless-stopped
+    networks:
+      - general-net
+
+networks:
+  general-net:
+    name: general-net
+    driver: bridge
